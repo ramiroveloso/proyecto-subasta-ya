@@ -9,16 +9,24 @@ namespace PROYECTO_SUBASTA.Infraestructure
         {
         }
 
-        // Tus Entidades
+        // --- Módulo Finanzas y Usuarios (Tu parte) ---
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Billetera> Billeteras { get; set; }
         public DbSet<TransactionLedger> TransactionLedgers { get; set; }
 
-        // TODO: Compañero, agrega aquí tus DbSets (Subastas, Categorias, Pujas, AuditLogs)
+        // --- Módulo Subastas (Parte de tu compañero) ---
+        public DbSet<Subasta> Subastas { get; set; }
+        public DbSet<Categoria> Categorias { get; set; }
+        public DbSet<Puja> Pujas { get; set; }
+        public DbSet<LogAuditoria> LogsAuditoria { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // ==========================================
+            // CONFIGURACIÓN MÓDULO FINANZAS
+            // ==========================================
 
             // Relación 1 a 1: Usuario - Billetera
             modelBuilder.Entity<Usuario>()
@@ -39,6 +47,20 @@ namespace PROYECTO_SUBASTA.Infraestructure
             modelBuilder.Entity<Billetera>().Property(b => b.SaldoRetenido).HasPrecision(18, 2);
             modelBuilder.Entity<Billetera>().Property(b => b.SaldoDisponible).HasPrecision(18, 2);
             modelBuilder.Entity<TransactionLedger>().Property(t => t.Monto).HasPrecision(18, 2);
+
+            // ==========================================
+            // CONFIGURACIÓN MÓDULO SUBASTAS
+            // ==========================================
+
+            // Aseguramos la misma precisión de 18,2 para las pujas, protegiendo la consistencia monetaria del sistema
+            modelBuilder.Entity<Puja>().Property(p => p.Monto).HasPrecision(18, 2);
+
+            // Relación 1 a N: Subasta - Pujas (Si se elimina una subasta, se eliminan sus pujas en cascada)
+            modelBuilder.Entity<Subasta>()
+                .HasMany(s => s.Pujas)
+                .WithOne(p => p.Subasta)
+                .HasForeignKey(p => p.SubastaId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
     }
 }
