@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Infraestructure\" />
+    <Folder Include="Controllers\" />
     <Folder Include="UseCases\" />
     <Folder Include="Repositories\" />
   </ItemGroup>
