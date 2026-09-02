@@ -9,12 +9,10 @@ namespace PROYECTO_SUBASTA.Infraestructure
         {
         }
 
-        // --- Módulo Finanzas y Usuarios (Tu parte) ---
+        // --- Módulo Finanzas y Usuarios ---
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Billetera> Billeteras { get; set; }
         public DbSet<TransactionLedger> TransactionLedgers { get; set; }
-
-        // --- Módulo Subastas (Parte de tu compañero) ---
         public DbSet<Subasta> Subastas { get; set; }
         public DbSet<Categoria> Categorias { get; set; }
         public DbSet<Puja> Pujas { get; set; }
