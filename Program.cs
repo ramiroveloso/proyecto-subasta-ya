@@ -49,6 +49,13 @@ builder.Services.AddScoped<SubastaUseCases>();
 
 // ----------------------------------------------
 
+// Repositorios
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
+
+// Servicios de Negocio
+builder.Services.AddScoped<IBilleteraService, BilleteraService>();
+
 var app = builder.Build();
 
 // ========================================================================
