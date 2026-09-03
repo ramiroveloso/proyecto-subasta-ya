@@ -17,10 +17,4 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.0.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Controllers\" />
-    <Folder Include="UseCases\" />
-    <Folder Include="Repositories\" />
-  </ItemGroup>
-
 </Project>
