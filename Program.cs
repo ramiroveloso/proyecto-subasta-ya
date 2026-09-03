@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Infraestructure;
+using PROYECTO_SUBASTA.Repositories;
+using PROYECTO_SUBASTA.UseCases;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,13 @@ builder.Services.AddDbContext<SubastaDbContext>(options =>
     ));
 
 // ----------------------------------------------
+
+// Repositorios
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
+
+// Servicios de Negocio
+builder.Services.AddScoped<IBilleteraService, BilleteraService>();
 
 var app = builder.Build();
 
