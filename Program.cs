@@ -29,6 +29,24 @@ builder.Services.AddDbContext<SubastaDbContext>(options =>
         ServerVersion.AutoDetect(connectionString)
     ));
 
+// ========================================================================
+// INYECCIÓN DE DEPENDENCIAS DE PERSISTENCIA (Clean Architecture)
+// ========================================================================
+
+// Registramos el servicio de aplicación para categorías en el contenedor IoC con un ciclo de vida "Scoped". 
+// Esto permite que el controlador reciba la lógica de negocio desacoplada y que la instancia 
+// persista durante toda la duración de la petición HTTP actual, compartiendo el mismo contexto de base de datos.
+// 1. Primero registramos las implementaciones de los repositorios contra sus abstracciones
+builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
+builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
+
+// Asociamos el caso de uso de subastas al contenedor de dependencias. Al registrarlo como "Scoped", 
+// aseguramos que todas las validaciones de negocio y operaciones de esta capa se ejecuten de manera aislada 
+// y coordinada por cada solicitud web entrante, cumpliendo con los principios de inversión de control (IoC).
+// 2. Luego registramos los Casos de Uso que dependen de dichos repositorios
+builder.Services.AddScoped<CategoriaUseCases>();
+builder.Services.AddScoped<SubastaUseCases>();
+
 // ----------------------------------------------
 
 // Repositorios
