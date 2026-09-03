@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Infraestructure;
+using PROYECTO_SUBASTA.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,22 @@ builder.Services.AddDbContext<SubastaDbContext>(options =>
         connectionString,
         ServerVersion.AutoDetect(connectionString)
     ));
+
+// ========================================================================
+// INYECCIÓN DE DEPENDENCIAS DE PERSISTENCIA (Clean Architecture)
+// ========================================================================
+
+// Vinculamos la abstracción del repositorio de categorías con su implementación concreta. 
+// Esto desacopla las reglas de negocio de la tecnología de base de datos (Principio de Inversión de Dependencias - DIP),
+// permitiendo aislar el dominio y facilitar las pruebas unitarias. El ciclo de vida "Scoped" 
+// garantiza una única instancia por cada petición HTTP, preservando la consistencia transaccional.
+builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
+
+// Asociamos la interfaz de subastas con su infraestructura de datos subyacente. 
+// Al programar contra esta abstracción, protegemos los Casos de Uso frente a cambios 
+// en el motor de persistencia y aseguramos que todas las operaciones de la solicitud compartan 
+// el mismo contexto de base de datos de manera segura.
+builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
 
 // ----------------------------------------------
 
