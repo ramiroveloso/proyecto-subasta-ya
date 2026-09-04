@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Infraestructure;
 using PROYECTO_SUBASTA.Repositories;
 using PROYECTO_SUBASTA.UseCases;
+using PROYECTO_SUBASTA.Hubs;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,9 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Registra los controladores de la API para que el framework sepa cómo enrutar las peticiones HTTP entrantes.
 builder.Services.AddControllers();
+// Registra SignalR para habilitar la comunicación en tiempo real entre el servidor y los clientes web.
+builder.Services.AddSignalR();
 
 // Habilita la exploración de las rutas de la API, necesario para que Swagger pueda descubrir los endpoints.
 builder.Services.AddEndpointsApiExplorer();
+// Configura Swagger para generar documentación interactiva de la API, permitiendo a los desarrolladores probar los endpoints directamente desde el navegador.
 builder.Services.AddSwaggerGen();
 
 // --- CONFIGURACIÓN DE BASE DE DATOS (MYSQL) ---
@@ -38,7 +43,9 @@ builder.Services.AddDbContext<SubastaDbContext>(options =>
 // persista durante toda la duración de la petición HTTP actual, compartiendo el mismo contexto de base de datos.
 // 1. Primero registramos las implementaciones de los repositorios contra sus abstracciones
 builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
+// Registramos los repositorios de subastas y pujas, asegurando que cada solicitud web tenga su propia instancia de estos repositorios,
 builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
+// lo que permite manejar transacciones y concurrencia de manera segura y aislada.
 builder.Services.AddScoped<IPujaRepository, PujaRepository>();
 
 // Asociamos el caso de uso de subastas al contenedor de dependencias. Al registrarlo como "Scoped", 
@@ -46,7 +53,9 @@ builder.Services.AddScoped<IPujaRepository, PujaRepository>();
 // y coordinada por cada solicitud web entrante, cumpliendo con los principios de inversión de control (IoC).
 // 2. Luego registramos los Casos de Uso que dependen de dichos repositorios
 builder.Services.AddScoped<CategoriaUseCases>();
+// Registramos los casos de uso de subastas y pujas, permitiendo que la lógica de negocio relacionada con estas entidades
 builder.Services.AddScoped<SubastaUseCases>();
+// y la coordinación de las operaciones de puja se manejen de manera centralizada y desacoplada del controlador.
 builder.Services.AddScoped<PujaUseCases>();
 
 // ----------------------------------------------
@@ -81,6 +90,8 @@ app.UseAuthorization();
 
 // Enlaza las rutas (ej. [Route("api/[controller]")]) con los controladores correspondientes.
 app.MapControllers();
+// Mapea el hub de SignalR para la comunicación en tiempo real de subastas, permitiendo a los clientes conectarse a "/subastaHub" y recibir actualizaciones instantáneas sobre las pujas y el estado de las subastas.
+app.MapHub<SubastaHub>("/subastaHub");
 
 // Inicia el servidor web integrado (Kestrel) y comienza a escuchar peticiones.
 app.Run();

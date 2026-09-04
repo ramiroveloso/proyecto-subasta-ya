@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using PROYECTO_SUBASTA.Hubs;
 using PROYECTO_SUBASTA.UseCases;
 
 namespace PROYECTO_SUBASTA.Controllers
@@ -9,55 +11,55 @@ namespace PROYECTO_SUBASTA.Controllers
     public class PujasController : ControllerBase
     {
         private readonly PujaUseCases _pujaUseCases;
+        private readonly IHubContext<SubastaHub> _hubContext;
 
-        public PujasController(PujaUseCases pujaUseCases)
+        // Inyectamos IHubContext para tener acceso a SignalR desde el controlador
+        public PujasController(PujaUseCases pujaUseCases, IHubContext<SubastaHub> hubContext)
         {
             _pujaUseCases = pujaUseCases;
+            _hubContext = hubContext;
         }
 
         [HttpPost]
         public async Task<IActionResult> RegistrarPuja([FromBody] PujaRequestDto request)
         {
-            // Validación básica de entrada
             if (request == null || request.Monto <= 0)
-            {
                 return BadRequest(new { mensaje = "Datos de puja inválidos." });
-            }
 
             try
             {
-                // Delegamos toda la complejidad al caso de uso
                 var nuevaPuja = await _pujaUseCases.RegistrarPujaAsync(request.SubastaId, request.UsuarioId, request.Monto);
 
-                // Si todo sale bien, devolvemos un 200 OK con los datos de la puja
+                // NOTIFICACIÓN EN TIEMPO REAL:
+                // Avisamos solo a los usuarios conectados al grupo de ESTA subasta.
+                await _hubContext.Clients.Group(request.SubastaId.ToString())
+                    .SendAsync("RecibirNuevaPuja", new
+                    {
+                        subastaId = request.SubastaId,
+                        nuevoPrecio = nuevaPuja.Monto,
+                        usuarioId = nuevaPuja.UsuarioId
+                    });
+
                 return Ok(nuevaPuja);
             }
             catch (ArgumentException ex)
             {
-                // Captura violaciones de negocio (saldo insuficiente, monto bajo, subasta cerrada) -> HTTP 400
                 return BadRequest(new { mensaje = ex.Message });
             }
             catch (DbUpdateConcurrencyException)
             {
-                // ¡LA MAGIA DE LA CONCURRENCIA!
-                // Captura si otro usuario modificó la subasta una fracción de segundo antes -> HTTP 409
                 return Conflict(new { mensaje = "Alguien más realizó una oferta al mismo tiempo. El precio ha cambiado, intenta nuevamente." });
             }
             catch (Exception ex)
             {
-                // Falla general de sistema -> HTTP 500
                 return StatusCode(500, new { mensaje = "Ocurrió un error al procesar la puja.", detalle = ex.Message });
             }
         }
     }
 
-    // DTO (Data Transfer Object) para recibir solo los datos necesarios desde el frontend sin exponer las entidades
     public class PujaRequestDto
     {
         public int SubastaId { get; set; }
-
-        // En una app real con JWT, el UsuarioId se sacaría del token (User.Claims), 
-        // pero por ahora lo recibimos en el body para agilizar las pruebas.
         public int UsuarioId { get; set; }
         public decimal Monto { get; set; }
     }
