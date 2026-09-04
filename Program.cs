@@ -39,6 +39,7 @@ builder.Services.AddDbContext<SubastaDbContext>(options =>
 // 1. Primero registramos las implementaciones de los repositorios contra sus abstracciones
 builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
 builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
+builder.Services.AddScoped<IPujaRepository, PujaRepository>();
 
 // Asociamos el caso de uso de subastas al contenedor de dependencias. Al registrarlo como "Scoped", 
 // aseguramos que todas las validaciones de negocio y operaciones de esta capa se ejecuten de manera aislada 
@@ -46,6 +47,7 @@ builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
 // 2. Luego registramos los Casos de Uso que dependen de dichos repositorios
 builder.Services.AddScoped<CategoriaUseCases>();
 builder.Services.AddScoped<SubastaUseCases>();
+builder.Services.AddScoped<PujaUseCases>();
 
 // ----------------------------------------------
 
