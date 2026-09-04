@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Entities;
 using PROYECTO_SUBASTA.Repositories;
+using PROYECTO_SUBASTA.UseCases;
 
 namespace PROYECTO_SUBASTA.Controllers
 {
@@ -8,41 +9,32 @@ namespace PROYECTO_SUBASTA.Controllers
     [ApiController]
     public class CategoriasController : ControllerBase
     {
-        private readonly ICategoriaRepository _categoriaRepository;
+        private readonly CategoriaUseCases _categoriaUseCases;
 
-        public CategoriasController(ICategoriaRepository categoriaRepository)
+        public CategoriasController(CategoriaUseCases categoriaUseCases)
         {
-            _categoriaRepository = categoriaRepository;
+            _categoriaUseCases = categoriaUseCases;
         }
 
         [HttpGet]
         public async Task<IActionResult> ObtenerTodas()
         {
-            // Delegamos la consulta a la abstracción de persistencia para mantener el controlador desacoplado de los detalles de la base de datos.
-            var categorias = await _categoriaRepository.ObtenerTodasAsync();
-
-            // Retornamos una respuesta HTTP 200 encapsulando el resultado obtenido por la capa inferior.
+            var categorias = await _categoriaUseCases.ObtenerTodasAsync();
             return Ok(categorias);
         }
 
         [HttpPost]
         public async Task<IActionResult> Crear([FromBody] Categoria categoria)
         {
-            // Validamos los datos de entrada a nivel de contrato HTTP para proteger el sistema de estados inconsistentes.
-            if (categoria == null)
+            try
             {
-                // Respondemos con un código 400 para informar al cliente que la estructura de la petición es incorrecta.
-                return BadRequest("Los datos de la categoría son inválidos.");
+                var nuevaCategoria = await _categoriaUseCases.CrearAsync(categoria);
+                return Ok(nuevaCategoria);
             }
-
-            // Solicitamos al repositorio que prepare la persistencia de la nueva entidad en memoria/contexto.
-            await _categoriaRepository.CrearAsync(categoria);
-
-            // Consolidamos la transacción en la base de datos de manera explícita para asegurar la persistencia.
-            await _categoriaRepository.GuardarCambiosAsync();
-
-            // Devolvemos la entidad creada confirmando el éxito de la operación HTTP.
-            return Ok(categoria);
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
         }
     }
 }
