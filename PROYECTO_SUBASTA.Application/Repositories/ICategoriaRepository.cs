@@ -1,9 +1,8 @@
-﻿using PROYECTO_SUBASTA.Entities;
+﻿using PROYECTO_SUBASTA.Domain.Entities;
 
-namespace PROYECTO_SUBASTA.Repositories
+namespace PROYECTO_SUBASTA.Application.Repositories
 {
-    // Definimos el contrato de persistencia para el dominio de categorías, desacoplando las reglas de negocio de los detalles de infraestructura.
-    public interface ICategoriaRepository
+    public interface ICategoriaRepository : IRepository<Categoria>
     {
         // Declaramos la firma asíncrona para recuperar la colección completa de categorías disponibles en el sistema.
         Task<IEnumerable<Categoria>> ObtenerTodasAsync();

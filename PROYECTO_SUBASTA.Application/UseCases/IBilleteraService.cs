@@ -1,8 +1,8 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using PROYECTO_SUBASTA.Entities;
+using PROYECTO_SUBASTA.Domain.Entities;
 
-namespace PROYECTO_SUBASTA.UseCases
+namespace PROYECTO_SUBASTA.Application.UseCases
 {
     // Establece el contrato de aplicación para orquestar la gestión financiera y garantizar la consistencia transaccional.
     public interface IBilleteraService

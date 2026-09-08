@@ -1,9 +1,8 @@
-﻿using PROYECTO_SUBASTA.Entities;
+﻿using PROYECTO_SUBASTA.Domain.Entities;
 
-namespace PROYECTO_SUBASTA.Repositories
+namespace PROYECTO_SUBASTA.Application.Repositories
 {
-    // Definimos el contrato de persistencia para el módulo de subastas, aislando la lógica de negocio de los detalles de base de datos.
-    public interface ISubastaRepository
+    public interface ISubastaRepository : IRepository<Subasta>
     {
         // Declaramos la firma para consultar de manera asíncrona todas las subastas que se encuentren activas en el sistema.
         Task<IEnumerable<Subasta>> ObtenerActivasAsync();

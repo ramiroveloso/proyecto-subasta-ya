@@ -2,7 +2,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace PROYECTO_SUBASTA.Entities
+namespace PROYECTO_SUBASTA.Domain.Entities
 {
     public enum TipoTransaccion
     {

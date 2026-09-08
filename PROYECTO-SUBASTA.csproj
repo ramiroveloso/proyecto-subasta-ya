@@ -17,4 +17,14 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PROYECTO_SUBASTA.Infrastructure\PROYECTO_SUBASTA.Infrastructure.csproj" />
+    <ProjectReference Include="PROYECTO_SUBASTA.Application\PROYECTO_SUBASTA.Application.csproj" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Compile Remove="PROYECTO_SUBASTA.Domain\**" />
+		<Compile Remove="PROYECTO_SUBASTA.Application\**" />
+	</ItemGroup>
+
 </Project>

@@ -1,7 +1,10 @@
-﻿using PROYECTO_SUBASTA.Entities;
-using PROYECTO_SUBASTA.Repositories;
+﻿using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.Repositories;
 
-namespace PROYECTO_SUBASTA.UseCases
+namespace PROYECTO_SUBASTA.Application.UseCases
 {
     // Encapsula las reglas de negocio y operaciones aplicativas correspondientes al dominio de categorías.
     public class CategoriaUseCases

@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using PROYECTO_SUBASTA.Entities;
-using PROYECTO_SUBASTA.Repositories;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.Repositories;
 
-namespace PROYECTO_SUBASTA.UseCases
+namespace PROYECTO_SUBASTA.Application.UseCases
 {
     public class BilleteraService : IBilleteraService
     {

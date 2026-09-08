@@ -1,0 +1,970 @@
+﻿
+
+==================== ARCHIVO: Program.cs ====================
+
+using Microsoft.EntityFrameworkCore;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.Application.Repositories;
+using PROYECTO_SUBASTA.Infrastructure.Persistence;
+using PROYECTO_SUBASTA.Infrastructure.Repositories;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// ========================================================================
+// 1. REGISTRO DE SERVICIOS (CONTENEDOR DE INYECCIÃ“N DE DEPENDENCIAS)
+// ========================================================================
+
+// Registra los controladores de la API para que el framework sepa cÃ³mo enrutar las peticiones HTTP entrantes.
+builder.Services.AddControllers();
+
+// Habilita la exploraciÃ³n de las rutas de la API, necesario para que Swagger pueda descubrir los endpoints.
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// --- CONFIGURACIÃ“N DE BASE DE DATOS (MYSQL) ---
+
+// Extraemos la cadena de conexiÃ³n desde appsettings.json para no exponer credenciales directamente en el cÃ³digo fuente.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+// Registramos el contexto de base de datos con un ciclo de vida "Scoped" (por defecto). 
+// Utilizamos ServerVersion.AutoDetect para que Pomelo optimice las consultas SQL basÃ¡ndose en la versiÃ³n exacta del motor local.
+builder.Services.AddDbContext<SubastaDbContext>(options =>
+    options.UseMySql(
+        connectionString,
+        ServerVersion.AutoDetect(connectionString)
+    ));
+
+// ========================================================================
+// INYECCIÃ“N DE DEPENDENCIAS DE PERSISTENCIA (Clean Architecture)
+// ========================================================================
+
+// Registramos el servicio de aplicaciÃ³n para categorÃ­as en el contenedor IoC con un ciclo de vida "Scoped". 
+// Esto permite que el controlador reciba la lÃ³gica de negocio desacoplada y que la instancia 
+// persista durante toda la duraciÃ³n de la peticiÃ³n HTTP actual, compartiendo el mismo contexto de base de datos.
+// 1. Primero registramos las implementaciones de los repositorios contra sus abstracciones
+builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
+builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
+
+// Asociamos el caso de uso de subastas al contenedor de dependencias. Al registrarlo como "Scoped", 
+// aseguramos que todas las validaciones de negocio y operaciones de esta capa se ejecuten de manera aislada 
+// y coordinada por cada solicitud web entrante, cumpliendo con los principios de inversiÃ³n de control (IoC).
+// 2. Luego registramos los Casos de Uso que dependen de dichos repositorios
+builder.Services.AddScoped<CategoriaUseCases>();
+builder.Services.AddScoped<SubastaUseCases>();
+builder.Services.AddScoped<UsuarioUseCases>();
+
+// ----------------------------------------------
+
+// Repositorios
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
+
+// Servicios de Negocio
+builder.Services.AddScoped<IBilleteraService, BilleteraService>();
+
+var app = builder.Build();
+
+// ========================================================================
+// 2. CONFIGURACIÃ“N DEL PIPELINE DE PETICIONES HTTP (MIDDLEWARES)
+// ========================================================================
+
+// Exponemos la interfaz grÃ¡fica de Swagger Ãºnicamente en el entorno de desarrollo 
+// para facilitar nuestras pruebas locales sin arriesgar la seguridad en un eventual paso a producciÃ³n.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+// Redirige automÃ¡ticamente todo el trÃ¡fico HTTP no seguro hacia HTTPS para proteger los datos en trÃ¡nsito.
+app.UseHttpsRedirection();
+
+// Registra el middleware de autorizaciÃ³n. Aunque ahora no lo usemos, deja la arquitectura preparada 
+// para la futura validaciÃ³n de usuarios (ej. mediante tokens JWT).
+app.UseAuthorization();
+
+// Enlaza las rutas (ej. [Route("api/[controller]")]) con los controladores correspondientes.
+app.MapControllers();
+
+// Inicia el servidor web integrado (Kestrel) y comienza a escuchar peticiones.
+app.Run();
+
+
+==================== ARCHIVO: BilleteraController.cs ====================
+
+using Microsoft.AspNetCore.Mvc;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.UseCases;
+
+namespace PROYECTO_SUBASTA.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class BilleteraController : ControllerBase
+    {
+        private readonly IBilleteraService _billeteraService;
+
+        public BilleteraController(IBilleteraService billeteraService)
+        {
+            _billeteraService = billeteraService;
+        }
+
+        // GET: api/Billetera/1
+        [HttpGet("{usuarioId}")]
+        public async Task<IActionResult> ObtenerPorUsuario(int usuarioId)
+        {
+            var billetera = await _billeteraService.ObtenerBilleteraPorUsuarioAsync(usuarioId);
+            if (billetera == null)
+            {
+                return NotFound(new { mensaje = $"No se encontró billetera asociada al usuario con ID {usuarioId}." });
+            }
+
+            return Ok(billetera);
+        }
+
+        // GET: api/Billetera/1/movimientos
+        [HttpGet("{usuarioId}/movimientos")]
+        public async Task<IActionResult> ObtenerMovimientos(int usuarioId)
+        {
+            // Retorna el historial diario de transacciones para alimentar la interfaz de auditoría financiera.
+            var movimientos = await _billeteraService.ObtenerMovimientosAsync(usuarioId);
+            return Ok(movimientos);
+        }
+
+        // POST: api/Billetera/cargar
+        [HttpPost("cargar")]
+        public async Task<IActionResult> CargarSaldo([FromBody] CargarSaldoDto dto)
+        {
+            var resultado = await _billeteraService.CargarSaldoAsync(dto.UsuarioId, dto.Monto);
+            if (!resultado)
+            {
+                return BadRequest(new { mensaje = "No se pudo realizar la carga. Verifique que el usuario exista y el monto sea mayor a 0." });
+            }
+
+            return Ok(new { mensaje = "Saldo acreditado correctamente." });
+        }
+
+        // POST: api/Billetera/retener
+        [HttpPost("retener")]
+        public async Task<IActionResult> RetenerSaldo([FromBody] OperacionFondosDto dto)
+        {
+            var resultado = await _billeteraService.RetenerSaldoAsync(dto.UsuarioId, dto.Monto, dto.SubastaId);
+            if (!resultado)
+            {
+                return BadRequest(new { mensaje = "No se pudo retener el saldo. Verifique que exista saldo disponible suficiente." });
+            }
+
+            return Ok(new { mensaje = "Saldo retenido preventivamente para la puja." });
+        }
+
+        // POST: api/Billetera/liberar
+        [HttpPost("liberar")]
+        public async Task<IActionResult> LiberarSaldo([FromBody] OperacionFondosDto dto)
+        {
+            var resultado = await _billeteraService.LiberarSaldoAsync(dto.UsuarioId, dto.Monto, dto.SubastaId);
+            if (!resultado)
+            {
+                return BadRequest(new { mensaje = "No se pudo liberar el saldo. Verifique los datos ingresados." });
+            }
+
+            return Ok(new { mensaje = "Saldo liberado y reintegrado al disponible." });
+        }
+    }
+
+    // Objetos de Transferencia de Datos (DTOs) para desacoplar el contrato de API del modelo de dominio.
+    public class CargarSaldoDto
+    {
+        public int UsuarioId { get; set; }
+        public decimal Monto { get; set; }
+    }
+
+    public class OperacionFondosDto
+    {
+        public int UsuarioId { get; set; }
+        public decimal Monto { get; set; }
+        public int SubastaId { get; set; }
+    }
+}
+
+
+==================== ARCHIVO: CategoriasController.cs ====================
+
+using Microsoft.AspNetCore.Mvc;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.UseCases;
+
+namespace PROYECTO_SUBASTA.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class CategoriasController : ControllerBase
+    {
+        private readonly CategoriaUseCases _categoriaUseCases;
+
+        public CategoriasController(CategoriaUseCases categoriaUseCases)
+        {
+            _categoriaUseCases = categoriaUseCases;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ObtenerTodas()
+        {
+            var categorias = await _categoriaUseCases.ObtenerTodasAsync();
+            return Ok(categorias);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Crear([FromBody] Categoria categoria)
+        {
+            try
+            {
+                var nuevaCategoria = await _categoriaUseCases.CrearAsync(categoria);
+                return Ok(nuevaCategoria);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+    }
+}
+
+
+==================== ARCHIVO: SubastasController.cs ====================
+
+using Microsoft.AspNetCore.Mvc;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.Application.Repositories;
+
+namespace PROYECTO_SUBASTA.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class SubastasController : ControllerBase
+    {
+        private readonly SubastaUseCases _subastaUseCases;
+
+        public SubastasController(SubastaUseCases subastaUseCases)
+        {
+            _subastaUseCases = subastaUseCases;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ObtenerActivas()
+        {
+            // Delegamos la obtención de las subastas activas al caso de uso para mantener al controlador libre de reglas lógicas.
+            var subastas = await _subastaUseCases.ObtenerActivasAsync();
+
+            // Empaquetamos la colección resultante en una respuesta HTTP 200 OK para el cliente.
+            return Ok(subastas);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> ObtenerPorId(int id)
+        {
+            // Solicitamos al caso de uso la búsqueda del recurso específico garantizando la separación de capas.
+            var subasta = await _subastaUseCases.ObtenerPorIdAsync(id);
+
+            // Comprobamos si la entidad existe en el sistema para evitar respuestas nulas hacia la capa de presentación.
+            if (subasta == null)
+            {
+                // Devolvemos un código de estado HTTP 404 informando que el identificador consultado no existe.
+                return NotFound($"No se encontró la subasta con el ID {id}.");
+            }
+
+            // Retornamos el recurso encontrado con un estado de éxito HTTP estándar.
+            return Ok(subasta);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Crear([FromBody] Subasta subasta)
+        {
+            // Validamos preliminarmente que el cuerpo de la petición HTTP no llegue vacío.
+            if (subasta == null)
+            {
+                // Rechazamos la solicitud con un estado HTTP 400 por estructura de datos inválida.
+                return BadRequest("Los datos de la subasta son inválidos.");
+            }
+
+            // Intentamos ejecutar la lógica de negocio a través del caso de uso, capturando posibles excepciones de validación.
+            try
+            {
+                // Delegamos la creación de la subasta y sus reglas de validación estricta al servicio de aplicación.
+                await _subastaUseCases.CrearAsync(subasta);
+
+                // Respondemos con un código HTTP 201 Created adjuntando la ruta de acceso al nuevo recurso generado.
+                return CreatedAtAction(nameof(ObtenerPorId), new { id = subasta.Id }, subasta);
+            }
+            catch (ArgumentException ex)
+            {
+                // Capturamos violaciones a las reglas de negocio del dominio y respondemos con un estado 400 Bad Request explicativo.
+                return BadRequest(ex.Message);
+            }
+        }
+    }
+}
+
+
+==================== ARCHIVO: UsuariosController.cs ====================
+
+using System;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using PROYECTO_SUBASTA.Application.UseCases;
+
+namespace PROYECTO_SUBASTA.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class UsuariosController : ControllerBase
+    {
+        private readonly UsuarioUseCases _usuarioUseCases;
+
+        public UsuariosController(UsuarioUseCases usuarioUseCases)
+        {
+            _usuarioUseCases = usuarioUseCases;
+        }
+
+        // POST: api/Usuarios
+        [HttpPost]
+        public async Task<IActionResult> CrearUsuario([FromBody] CrearUsuarioDto dto)
+        {
+            try
+            {
+                var usuario = await _usuarioUseCases.CrearUsuarioConBilleteraAsync(dto.Nombre, dto.Email);
+                return Ok(new { mensaje = "Usuario y billetera creados correctamente", usuarioId = usuario.Id });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+    }
+
+    public class CrearUsuarioDto
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+    }
+}
+
+
+==================== ARCHIVO: IBilleteraRepository.cs ====================
+
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+
+namespace PROYECTO_SUBASTA.Application.Repositories
+{
+    public interface IBilleteraRepository : IRepository<Billetera>
+    {
+        Task<Billetera?> ObtenerPorUsuarioIdAsync(int usuarioId);
+    }
+}
+
+
+
+==================== ARCHIVO: ICategoriaRepository.cs ====================
+
+using PROYECTO_SUBASTA.Domain.Entities;
+
+namespace PROYECTO_SUBASTA.Application.Repositories
+{
+    public interface ICategoriaRepository : IRepository<Categoria>
+    {
+        // Declaramos la firma asíncrona para recuperar la colección completa de categorías disponibles en el sistema.
+        Task<IEnumerable<Categoria>> ObtenerTodasAsync();
+
+        // Establecemos el contrato para buscar una categoría específica de manera unívoca mediante su identificador.
+        Task<Categoria?> ObtenerPorIdAsync(int id);
+
+        // Definimos la operación de contrato para registrar una nueva categoría dentro del flujo de persistencia.
+        Task CrearAsync(Categoria categoria);
+
+        // Exponemos la firma para consolidar y guardar los cambios transaccionales en el motor de base de datos.
+        Task GuardarCambiosAsync();
+    }
+}
+
+
+==================== ARCHIVO: IRepository.cs ====================
+
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+
+namespace PROYECTO_SUBASTA.Application.Repositories
+{
+    public interface IRepository<T> where T : class
+    {
+        Task<IEnumerable<T>> GetAllAsync();
+        Task<T?> GetByIdAsync(int id);
+        Task AddAsync(T entity);
+        void Update(T entity);
+        void Delete(T entity);
+        Task SaveChangesAsync();
+    }
+}
+
+
+
+==================== ARCHIVO: ISubastaRepository.cs ====================
+
+using PROYECTO_SUBASTA.Domain.Entities;
+
+namespace PROYECTO_SUBASTA.Application.Repositories
+{
+    public interface ISubastaRepository : IRepository<Subasta>
+    {
+        // Declaramos la firma para consultar de manera asíncrona todas las subastas que se encuentren activas en el sistema.
+        Task<IEnumerable<Subasta>> ObtenerActivasAsync();
+
+        // Establecemos el contrato para recuperar una subasta en particular a través de su identificador único.
+        Task<Subasta?> ObtenerPorIdAsync(int id);
+
+        // Definimos la operación de contrato para registrar una nueva subasta dentro del contexto de persistencia.
+        Task CrearAsync(Subasta subasta);
+
+        // Exponemos la firma para modificar o actualizar los datos de una subasta existente.
+        Task ActualizarAsync(Subasta subasta);
+
+        // Definimos el contrato para consolidar y guardar físicamente los cambios transaccionales en la base de datos.
+        Task GuardarCambiosAsync();
+    }
+}
+
+
+==================== ARCHIVO: BilleteraService.cs ====================
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.Repositories;
+
+namespace PROYECTO_SUBASTA.Application.UseCases
+{
+    public class BilleteraService : IBilleteraService
+    {
+        private readonly IBilleteraRepository _billeteraRepository;
+        private readonly IRepository<TransactionLedger> _ledgerRepository;
+
+        // Inyectamos las abstracciones de persistencia promoviendo el desacoplamiento de capas (Inversion of Control).
+        public BilleteraService(
+            IBilleteraRepository billeteraRepository,
+            IRepository<TransactionLedger> ledgerRepository)
+        {
+            _billeteraRepository = billeteraRepository;
+            _ledgerRepository = ledgerRepository;
+        }
+
+        public async Task<Billetera?> ObtenerBilleteraPorUsuarioAsync(int usuarioId)
+        {
+            return await _billeteraRepository.ObtenerPorUsuarioIdAsync(usuarioId);
+        }
+
+        public async Task<bool> CargarSaldoAsync(int usuarioId, decimal monto)
+        {
+            if (monto <= 0) return false;
+
+            var billetera = await _billeteraRepository.ObtenerPorUsuarioIdAsync(usuarioId);
+            if (billetera == null) return false;
+
+            // Transición de estado: se incrementa la liquidez total y disponible
+            billetera.SaldoTotal += monto;
+            billetera.SaldoDisponible += monto;
+            _billeteraRepository.Update(billetera);
+
+            // Registro en el libro diario para trazabilidad e intangibilidad financiera
+            var transaccion = new TransactionLedger
+            {
+                BilleteraId = billetera.Id,
+                Monto = monto,
+                Tipo = TipoTransaccion.DEPOSITO,
+                Fecha = DateTime.UtcNow
+            };
+            await _ledgerRepository.AddAsync(transaccion);
+
+            await _billeteraRepository.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> RetenerSaldoAsync(int usuarioId, decimal monto, int subastaId)
+        {
+            if (monto <= 0) return false;
+
+            var billetera = await _billeteraRepository.ObtenerPorUsuarioIdAsync(usuarioId);
+            if (billetera == null) return false;
+
+            try
+            {
+                // Delegamos la validación del dominio a la entidad Billetera (Rich Domain Model)
+                billetera.RetenerSaldo(monto);
+                _billeteraRepository.Update(billetera);
+
+                // Registramos el evento de retención especificando el identificador de la subasta
+                var transaccion = new TransactionLedger
+                {
+                    BilleteraId = billetera.Id,
+                    Monto = monto,
+                    Tipo = TipoTransaccion.RETENCION,
+                    SubastaId = subastaId,
+                    Fecha = DateTime.UtcNow
+                };
+                await _ledgerRepository.AddAsync(transaccion);
+
+                await _billeteraRepository.SaveChangesAsync();
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                // Captura el fallo si el saldo disponible es insuficiente
+                return false;
+            }
+        }
+
+        public async Task<bool> LiberarSaldoAsync(int usuarioId, decimal monto, int subastaId)
+        {
+            if (monto <= 0) return false;
+
+            var billetera = await _billeteraRepository.ObtenerPorUsuarioIdAsync(usuarioId);
+            if (billetera == null) return false;
+
+            // Restablecemos el saldo congelado al estado disponible dentro del agregado
+            billetera.LiberarSaldo(monto);
+            _billeteraRepository.Update(billetera);
+
+            // Asentamos la contrapartida contable de liberación en la auditoría
+            var transaccion = new TransactionLedger
+            {
+                BilleteraId = billetera.Id,
+                Monto = monto,
+                Tipo = TipoTransaccion.LIBERACION,
+                SubastaId = subastaId,
+                Fecha = DateTime.UtcNow
+            };
+            await _ledgerRepository.AddAsync(transaccion);
+
+            await _billeteraRepository.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<IEnumerable<TransactionLedger>> ObtenerMovimientosAsync(int usuarioId)
+        {
+            var billetera = await _billeteraRepository.ObtenerPorUsuarioIdAsync(usuarioId);
+            if (billetera == null) return Enumerable.Empty<TransactionLedger>();
+
+            var todosLosMovimientos = await _ledgerRepository.GetAllAsync();
+
+            // Filtramos los registros del ledger pertenecientes a la billetera y los ordenamos cronológicamente
+            return todosLosMovimientos
+                .Where(m => m.BilleteraId == billetera.Id)
+                .OrderByDescending(m => m.Fecha);
+        }
+    }
+}
+
+
+==================== ARCHIVO: CategoriaUseCases.cs ====================
+
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.Repositories;
+
+namespace PROYECTO_SUBASTA.Application.UseCases
+{
+    // Encapsula las reglas de negocio y operaciones aplicativas correspondientes al dominio de categorías.
+    public class CategoriaUseCases
+    {
+        private readonly ICategoriaRepository _categoriaRepository;
+
+        // Inyectamos el repositorio abstracto para mantener el caso de uso desacoplado de la persistencia física.
+        public CategoriaUseCases(ICategoriaRepository categoriaRepository)
+        {
+            _categoriaRepository = categoriaRepository;
+        }
+
+        // Orquesta la recuperación de todas las categorías disponibles aplicando las políticas de la aplicación.
+        public async Task<IEnumerable<Categoria>> ObtenerTodasAsync()
+        {
+            return await _categoriaRepository.ObtenerTodasAsync();
+        }
+
+        // Ejecuta la lógica para registrar una nueva categoría validando reglas previas si fuera necesario.
+        public async Task<Categoria> CrearAsync(Categoria categoria)
+        {
+            // Validamos que el nombre de la categoría no esté vacío para proteger la integridad del dominio.
+            if (string.IsNullOrWhiteSpace(categoria.Nombre))
+            {
+                throw new ArgumentException("El nombre de la categoría es obligatorio.");
+            }
+
+            await _categoriaRepository.CrearAsync(categoria);
+            await _categoriaRepository.GuardarCambiosAsync();
+
+            return categoria;
+        }
+    }
+}
+
+
+==================== ARCHIVO: IBilleteraService.cs ====================
+
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+
+namespace PROYECTO_SUBASTA.Application.UseCases
+{
+    // Establece el contrato de aplicación para orquestar la gestión financiera y garantizar la consistencia transaccional.
+    public interface IBilleteraService
+    {
+        Task<Billetera?> ObtenerBilleteraPorUsuarioAsync(int usuarioId);
+        Task<bool> CargarSaldoAsync(int usuarioId, decimal monto);
+
+        // Firma para congelar fondos temporalmente cuando un usuario realiza una oferta válida en una subasta.
+        Task<bool> RetenerSaldoAsync(int usuarioId, decimal monto, int subastaId);
+
+        // Firma para desbloquear y retornar fondos al saldo disponible cuando la oferta de un usuario es superada.
+        Task<bool> LiberarSaldoAsync(int usuarioId, decimal monto, int subastaId);
+
+        // Firma para recuperar el libro diario contable (audit trail) de un usuario específico.
+        Task<IEnumerable<TransactionLedger>> ObtenerMovimientosAsync(int usuarioId);
+    }
+}
+
+
+==================== ARCHIVO: SubastaUseCases.cs ====================
+
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.Repositories;
+
+namespace PROYECTO_SUBASTA.Application.UseCases
+{
+    // Centraliza la lógica de negocio y validaciones estrictas para la gestión y publicación de subastas.
+    public class SubastaUseCases
+    {
+        private readonly ISubastaRepository _subastaRepository;
+
+        // Inyectamos el repositorio de subastas cumpliendo con el principio de inversión de dependencias.
+        public SubastaUseCases(ISubastaRepository subastaRepository)
+        {
+            _subastaRepository = subastaRepository;
+        }
+
+        // Recupera el catálogo de subastas activas aplicando las reglas de filtrado correspondientes.
+        public async Task<IEnumerable<Subasta>> ObtenerActivasAsync()
+        {
+            return await _subastaRepository.ObtenerActivasAsync();
+        }
+
+        // Busca una subasta específica por su identificador único asegurando la trazabilidad del recurso.
+        public async Task<Subasta?> ObtenerPorIdAsync(int id)
+        {
+            return await _subastaRepository.ObtenerPorIdAsync(id);
+        }
+
+        // Orquesta la creación de una nueva subasta aplicando validaciones de negocio críticas.
+        public async Task<Subasta> CrearAsync(Subasta subasta)
+        {
+            // Validamos que el precio base sea estrictamente mayor a cero para garantizar la viabilidad económica de la puja.
+            if (subasta.PrecioBase <= 0)
+            {
+                throw new ArgumentException("El precio base de la subasta debe ser mayor a cero.");
+            }
+
+            // Validamos que el incremento mínimo esté configurado correctamente para evitar pujas inválidas.
+            if (subasta.IncrementoMinimo <= 0)
+            {
+                throw new ArgumentException("El incremento mínimo debe ser mayor a cero.");
+            }
+
+            // Verificamos la coherencia cronológica de la subasta (la fecha de inicio debe ser anterior a la fecha de cierre).
+            if (subasta.FechaInicio >= subasta.FechaFin)
+            {
+                throw new ArgumentException("La fecha de inicio debe ser anterior a la fecha de finalización de la subasta.");
+            }
+
+            await _subastaRepository.CrearAsync(subasta);
+            await _subastaRepository.GuardarCambiosAsync();
+
+            return subasta;
+        }
+    }
+}
+
+
+==================== ARCHIVO: UsuarioUseCases.cs ====================
+
+using System;
+using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.Repositories;
+
+namespace PROYECTO_SUBASTA.Application.UseCases
+{
+    public class UsuarioUseCases
+    {
+        private readonly IRepository<Usuario> _usuarioRepository;
+        private readonly IBilleteraRepository _billeteraRepository;
+
+        public UsuarioUseCases(
+            IRepository<Usuario> usuarioRepository,
+            IBilleteraRepository billeteraRepository)
+        {
+            _usuarioRepository = usuarioRepository;
+            _billeteraRepository = billeteraRepository;
+        }
+
+        public async Task<Usuario> CrearUsuarioConBilleteraAsync(string nombre, string email)
+        {
+            if (string.IsNullOrWhiteSpace(nombre))
+            {
+                throw new ArgumentException("El nombre del usuario es obligatorio.");
+            }
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                throw new ArgumentException("El email del usuario es obligatorio.");
+            }
+
+            var usuario = new Usuario
+            {
+                Nombre = nombre,
+                Email = email,
+                PasswordHash = "HASH_PRUEBA_123", // Pendiente integrar hashing real (BCrypt/Identity)
+                FechaRegistro = DateTime.UtcNow
+            };
+
+            await _usuarioRepository.AddAsync(usuario);
+            await _usuarioRepository.SaveChangesAsync();
+
+            // Creación automática de la billetera asociada al usuario
+            var billetera = new Billetera
+            {
+                UsuarioId = usuario.Id,
+                SaldoTotal = 0,
+                SaldoRetenido = 0,
+                SaldoDisponible = 0,
+                Version = 1
+            };
+
+            await _billeteraRepository.AddAsync(billetera);
+            await _billeteraRepository.SaveChangesAsync();
+
+            return usuario;
+        }
+    }
+}
+
+
+==================== ARCHIVO: Billetera.cs ====================
+
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public class Billetera
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public int UsuarioId { get; set; }
+        public Usuario Usuario { get; set; } = null!;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal SaldoTotal { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal SaldoRetenido { get; set; } = 0;
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal SaldoDisponible { get; set; } = 0;
+
+        // Control de concurrencia optimista (Mandatorio)
+        [ConcurrencyCheck]
+        public int Version { get; set; }
+
+        public ICollection<TransactionLedger> Movimientos { get; set; } = new List<TransactionLedger>();
+
+        // Lógica de negocio encapsulada
+        public void RetenerSaldo(decimal monto)
+        {
+            if (SaldoDisponible < monto)
+                throw new InvalidOperationException("Fondos insuficientes.");
+
+            SaldoDisponible -= monto;
+            SaldoRetenido += monto;
+        }
+
+        public void LiberarSaldo(decimal monto)
+        {
+            SaldoRetenido -= monto;
+            SaldoDisponible += monto;
+        }
+    }
+}
+
+
+==================== ARCHIVO: Categoria.cs ====================
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public class Categoria
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string UrlIcono { get; set; } = string.Empty;
+    }
+}
+
+
+
+==================== ARCHIVO: LogAuditoria.cs ====================
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public class LogAuditoria
+    {
+        public int Id { get; set; }
+        public int? UsuarioId { get; set; }
+        public string Accion { get; set; } = string.Empty;
+        public string Detalle { get; set; } = string.Empty;
+        public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;
+    }
+}
+
+
+
+==================== ARCHIVO: Puja.cs ====================
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public class Puja
+    {
+        public int Id { get; set; }
+        public int SubastaId { get; set; }
+        public int UsuarioId { get; set; }
+        public decimal Monto { get; set; }
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+
+        // Relaciones de navegación
+        public Subasta? Subasta { get; set; }
+        public Usuario? Usuario { get; set; }
+    }
+}
+
+
+
+==================== ARCHIVO: Subasta.cs ====================
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public class Subasta
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+        public string UrlImagen { get; set; } = string.Empty;
+        public decimal PrecioBase { get; set; }
+        public decimal IncrementoMinimo { get; set; }
+        public DateTime FechaInicio { get; set; }
+        public DateTime FechaFin { get; set; }
+        public string Estado { get; set; } = "PROGRAMADA"; // PROGRAMADA, ACTIVA, FINALIZADA, DESIERTA
+        public int CategoriaId { get; set; }
+        public int VendedorId { get; set; }
+        public int? GanadorId { get; set; }
+        public decimal? PrecioFinal { get; set; }
+
+        // Control de Concurrencia Optimista (Optimistic Locking)
+        public uint Version { get; set; }
+
+        // Relaciones de navegación
+        public Categoria? Categoria { get; set; }
+        public Usuario? Vendedor { get; set; }
+        public ICollection<Puja> Pujas { get; set; } = new List<Puja>();
+    }
+}
+
+
+
+==================== ARCHIVO: TransactionLedger.cs ====================
+
+using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public enum TipoTransaccion
+    {
+        DEPOSITO,
+        RETENCION,
+        LIBERACION,
+        PAGO,
+        COBRO
+    }
+
+    public class TransactionLedger
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public int BilleteraId { get; set; }
+        public Billetera Billetera { get; set; } = null!;
+
+        [Required]
+        public TipoTransaccion Tipo { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal Monto { get; set; }
+
+        public DateTime Fecha { get; set; } = DateTime.UtcNow;
+
+        public int? SubastaId { get; set; }
+    }
+}
+
+
+==================== ARCHIVO: Usuario.cs ====================
+
+using System.ComponentModel.DataAnnotations;
+
+namespace PROYECTO_SUBASTA.Domain.Entities
+{
+    public class Usuario
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        [MaxLength(150)]
+        public string Email { get; set; } = null!;
+
+        [Required]
+        [MaxLength(100)]
+        public string Nombre { get; set; } = null!;
+
+        [Required]
+        public string PasswordHash { get; set; } = null!;
+
+        public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;
+
+        // Propiedad de navegación: Relación 1 a 1 con Billetera
+        public Billetera Billetera { get; set; } = null!;
+    }
+}
+

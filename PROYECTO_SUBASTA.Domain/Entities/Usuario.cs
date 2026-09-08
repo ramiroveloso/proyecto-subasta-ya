@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace PROYECTO_SUBASTA.Entities
+namespace PROYECTO_SUBASTA.Domain.Entities
 {
     public class Usuario
     {

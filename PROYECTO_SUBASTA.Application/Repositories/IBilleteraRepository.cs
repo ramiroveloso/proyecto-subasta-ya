@@ -1,7 +1,7 @@
-﻿using PROYECTO_SUBASTA.Entities;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Domain.Entities;
 
-namespace PROYECTO_SUBASTA.Repositories
+namespace PROYECTO_SUBASTA.Application.Repositories
 {
     public interface IBilleteraRepository : IRepository<Billetera>
     {

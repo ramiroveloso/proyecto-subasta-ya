@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using PROYECTO_SUBASTA.Infraestructure;
-using PROYECTO_SUBASTA.Repositories;
-using PROYECTO_SUBASTA.UseCases;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.Application.Repositories;
+using PROYECTO_SUBASTA.Infrastructure.Persistence;
+using PROYECTO_SUBASTA.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +48,7 @@ builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
 // 2. Luego registramos los Casos de Uso que dependen de dichos repositorios
 builder.Services.AddScoped<CategoriaUseCases>();
 builder.Services.AddScoped<SubastaUseCases>();
+builder.Services.AddScoped<UsuarioUseCases>();
 
 // ----------------------------------------------
 

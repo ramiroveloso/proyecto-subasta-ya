@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using PROYECTO_SUBASTA.Entities;
-using PROYECTO_SUBASTA.Repositories;
-using PROYECTO_SUBASTA.UseCases;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.UseCases;
 
 namespace PROYECTO_SUBASTA.Controllers
 {
