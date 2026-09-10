@@ -2,8 +2,10 @@
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Application.Repositories;
+using System;
+using System.Threading.Tasks;
 
-namespace PROYECTO_SUBASTA.Controllers
+namespace PROYECTO_SUBASTA.Api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

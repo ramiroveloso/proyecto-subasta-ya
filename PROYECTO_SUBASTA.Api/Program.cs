@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Application.Repositories;
-using PROYECTO_SUBASTA.Infrastructure.Persistence;
+using PROYECTO_SUBASTA.Infrastructure.Data;
 using PROYECTO_SUBASTA.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);

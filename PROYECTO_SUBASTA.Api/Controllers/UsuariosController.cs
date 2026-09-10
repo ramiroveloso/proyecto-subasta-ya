@@ -2,8 +2,10 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Application.UseCases;
+using System;
+using System.Threading.Tasks;
 
-namespace PROYECTO_SUBASTA.Controllers
+namespace PROYECTO_SUBASTA.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]

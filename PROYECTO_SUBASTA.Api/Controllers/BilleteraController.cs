@@ -1,8 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.Infrastructure.Data;
+using System;
+using System.Threading.Tasks;
 
-namespace PROYECTO_SUBASTA.Controllers
+namespace PROYECTO_SUBASTA.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -32,7 +35,6 @@ namespace PROYECTO_SUBASTA.Controllers
         [HttpGet("{usuarioId}/movimientos")]
         public async Task<IActionResult> ObtenerMovimientos(int usuarioId)
         {
-            // Retorna el historial diario de transacciones para alimentar la interfaz de auditoría financiera.
             var movimientos = await _billeteraService.ObtenerMovimientosAsync(usuarioId);
             return Ok(movimientos);
         }
@@ -77,7 +79,6 @@ namespace PROYECTO_SUBASTA.Controllers
         }
     }
 
-    // Objetos de Transferencia de Datos (DTOs) para desacoplar el contrato de API del modelo de dominio.
     public class CargarSaldoDto
     {
         public int UsuarioId { get; set; }
