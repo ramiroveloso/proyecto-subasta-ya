@@ -18,8 +18,19 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// --- CONFIGURACIÓN DE BASE DE DATOS (MYSQL) ---
+// --- CONFIGURACIÓN DE CORS ---
+// Habilitamos una política abierta para permitir peticiones desde frontends locales o externos en desarrollo.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 
+// --- CONFIGURACIÓN DE BASE DE DATOS (MYSQL) ---
 // Extraemos la cadena de conexión desde appsettings.json para no exponer credenciales directamente en el código fuente.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
@@ -32,31 +43,22 @@ builder.Services.AddDbContext<SubastaDbContext>(options =>
     ));
 
 // ========================================================================
-// INYECCIÓN DE DEPENDENCIAS DE PERSISTENCIA (Clean Architecture)
+// INYECCIÓN DE DEPENDENCIAS DE PERSISTENCIA Y CASOS DE USO (Clean Architecture)
 // ========================================================================
 
-// Registramos el servicio de aplicación para categorías en el contenedor IoC con un ciclo de vida "Scoped". 
-// Esto permite que el controlador reciba la lógica de negocio desacoplada y que la instancia 
-// persista durante toda la duración de la petición HTTP actual, compartiendo el mismo contexto de base de datos.
-// 1. Primero registramos las implementaciones de los repositorios contra sus abstracciones
+// --- REPOSITORIOS (Persistencia) ---
+// Registramos el repositorio genérico y las implementaciones específicas contra sus abstracciones.
+builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
 builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
+builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
 
-// Asociamos el caso de uso de subastas al contenedor de dependencias. Al registrarlo como "Scoped", 
-// aseguramos que todas las validaciones de negocio y operaciones de esta capa se ejecuten de manera aislada 
-// y coordinada por cada solicitud web entrante, cumpliendo con los principios de inversión de control (IoC).
-// 2. Luego registramos los Casos de Uso que dependen de dichos repositorios
+// --- CASOS DE USO Y SERVICIOS DE APLICACIÓN ---
+// Asociamos la lógica de negocio al contenedor IoC con ciclo de vida "Scoped" 
+// para asegurar que las operaciones se ejecuten de manera aislada por cada solicitud web.
 builder.Services.AddScoped<CategoriaUseCases>();
 builder.Services.AddScoped<SubastaUseCases>();
 builder.Services.AddScoped<UsuarioUseCases>();
-
-// ----------------------------------------------
-
-// Repositorios
-builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
-builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
-
-// Servicios de Negocio
 builder.Services.AddScoped<IBilleteraService, BilleteraService>();
 
 var app = builder.Build();
@@ -72,6 +74,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Activamos la política de CORS definida previamente en el contenedor de servicios.
+app.UseCors("AllowAll");
 
 // Redirige automáticamente todo el tráfico HTTP no seguro hacia HTTPS para proteger los datos en tránsito.
 app.UseHttpsRedirection();
