@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SubastaYa - Dashboard & Consola Tester Ramiro Veloso</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Estilos Personalizados Corporativos -->
+    <link rel="stylesheet" href="css/custom.css">
+</head>
+<body>
+
+    <!-- Navbar Superior Corporativo con Perfil Principal Tester Ramiro Veloso -->
+    <nav class="navbar navbar-dark navbar-custom shadow-sm py-2">
+        <div class="container-fluid px-4">
+            <div class="d-flex align-items-center">
+                <span class="navbar-brand mb-0 h1 fs-3 fw-bold me-3">
+                    <i class="fa-solid fa-gavel text-warning me-2"></i>SubastaYa
+                </span>
+                <span class="badge bg-white text-dark small font-monospace d-none d-md-inline-block opacity-75">
+                    Panel de Control &bull; Clean Architecture
+                </span>
+            </div>
+            
+            <div class="d-flex align-items-center gap-3">
+                <div id="api-status-badge" class="api-status-badge badge bg-secondary text-white">
+                    <i class="fa-solid fa-spinner fa-spin me-1"></i> Comprobando API...
+                </div>
+
+                <!-- Dropdown de Perfiles Semilla con Ramiro Veloso Tester como por Defecto -->
+                <div class="dropdown">
+                    <button class="btn btn-outline-light btn-sm dropdown-toggle rounded-pill px-3 fw-medium" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fa-solid fa-user-gear me-1 text-warning"></i> <span id="wallet-usuario-info">Ramiro Veloso (ramiro.veloso@tester.com)</span>
+                    </button>
+                    <ul id="dropdown-perfiles-semilla" class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width: 300px;">
+                        <!-- Renderizado dinámicamente -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4 px-4">
+        <div class="row">
+            <!-- Menú Lateral de Navegación por Pestañas (Tabs) -->
+            <div class="col-lg-3 col-md-4 mb-4">
+                <div class="card sidebar-card shadow-sm p-3">
+                    <div class="d-flex align-items-center mb-3 px-2">
+                        <i class="fa-solid fa-layer-group text-primary-custom fs-5 me-2"></i>
+                        <h5 class="text-dark text-uppercase fs-6 fw-bold mb-0">Módulos del Sistema</h5>
+                    </div>
+                    
+                    <div class="nav flex-column nav-pills gap-2" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                        <button class="nav-link active text-start" id="tab-catalogo" data-bs-toggle="pill" data-bs-target="#content-catalogo" type="button" role="tab" aria-controls="content-catalogo" aria-selected="true">
+                            <i class="fa-solid fa-store me-2"></i>Catálogo y Exploración
+                        </button>
+                        <button class="nav-link text-start" id="tab-publicar" data-bs-toggle="pill" data-bs-target="#content-publicar" type="button" role="tab" aria-controls="content-publicar" aria-selected="false">
+                            <i class="fa-solid fa-circle-plus me-2"></i>Crear Subasta
+                        </button>
+                        <button class="nav-link text-start" id="tab-sala" data-bs-toggle="pill" data-bs-target="#content-sala" type="button" role="tab" aria-controls="content-sala" aria-selected="false">
+                            <i class="fa-solid fa-bolt me-2"></i>Sala en Vivo
+                        </button>
+                        <button class="nav-link text-start" id="tab-billetera" data-bs-toggle="pill" data-bs-target="#content-billetera" type="button" role="tab" aria-controls="content-billetera" aria-selected="false">
+                            <i class="fa-solid fa-wallet me-2"></i>Billetera Virtual
+                        </button>
+                        <button class="nav-link text-start" id="tab-actividades" data-bs-toggle="pill" data-bs-target="#content-actividades" type="button" role="tab" aria-controls="content-actividades" aria-selected="false">
+                            <i class="fa-solid fa-user-clock me-2"></i>Mis Actividades
+                        </button>
+                    </div>
+
+                    <!-- Consola Rápida Carga Libre para Ramiro Veloso Tester -->
+                    <div class="mt-4 pt-3 border-top px-2">
+                        <div class="bg-light p-3 rounded-3 border">
+                            <h6 class="small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-bolt text-warning me-1"></i> Tester Ramiro Veloso
+                            </h6>
+                            <p class="extra-small text-muted mb-2">Carga libre de fondos para simulación instantánea de pujas:</p>
+                            <div class="d-grid gap-1">
+                                <button class="btn btn-success btn-sm extra-small fw-bold" onclick="cargarSaldoLibreRapido(100000)">
+                                    <i class="fa-solid fa-plus-circle me-1"></i> Carga Libre +$100.000
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm extra-small" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo">
+                                    Monto Personalizado...
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contenido Principal de las Pestañas -->
+            <div class="col-lg-9 col-md-8">
+                <div class="tab-content" id="v-pills-tabContent">
+                    
+                    <!-- =================================================================== -->
+                    <!-- MÓDULO 1: CATÁLOGO Y EXPLORACIÓN -->
+                    <!-- =================================================================== -->
+                    <div class="tab-pane fade show active" id="content-catalogo" role="tabpanel" aria-labelledby="tab-catalogo">
+                        <div class="card content-card p-4 mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div>
+                                    <h3 class="text-primary-custom fw-bold mb-1">Catálogo y Exploración de Subastas</h3>
+                                    <p class="text-muted mb-0">Explora, filtra y encuentra artículos disponibles en tiempo real.</p>
+                                </div>
+                                <button class="btn btn-outline-primary-custom btn-sm" onclick="aplicarFiltros()">
+                                    <i class="fa-solid fa-rotate me-1"></i> Actualizar
+                                </button>
+                            </div>
+                            
+                            <div class="row g-3 bg-light p-3 rounded-3 mb-4 border">
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-secondary">Búsqueda por nombre</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                                        <input type="text" id="filtro-busqueda" class="form-control form-control-sm" placeholder="Buscar subasta..." onkeyup="aplicarFiltros()">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-secondary">Estado</label>
+                                    <select id="filtro-estado" class="form-select form-select-sm" onchange="aplicarFiltros()">
+                                        <option value="">Todos los estados</option>
+                                        <option value="ACTIVA">Activas</option>
+                                        <option value="PROGRAMADA">Próximas</option>
+                                        <option value="FINALIZADA">Finalizadas</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-secondary">Categoría</label>
+                                    <select id="filtro-categoria" class="form-select form-select-sm" onchange="aplicarFiltros()">
+                                        <option value="">Todas las categorías</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-secondary">Ordenar por</label>
+                                    <select id="filtro-orden" class="form-select form-select-sm" onchange="aplicarFiltros()">
+                                        <option value="tiempo">Menor tiempo restante</option>
+                                        <option value="puja">Mayor puja actual</option>
+                                        <option value="precio">Precio base menor</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="catalogo-grid" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4"></div>
+                        </div>
+                    </div>
+
+                    <!-- =================================================================== -->
+                    <!-- MÓDULO 2: CREACIÓN Y PUBLICACIÓN -->
+                    <!-- =================================================================== -->
+                    <div class="tab-pane fade" id="content-publicar" role="tabpanel" aria-labelledby="tab-publicar">
+                        <div class="card content-card p-4">
+                            <div class="border-bottom pb-3 mb-4">
+                                <h3 class="text-primary-custom fw-bold mb-1">Crear y Publicar Subasta</h3>
+                                <p class="text-muted mb-0">Configura una nueva subasta con reglas económicas y temporales para publicación.</p>
+                            </div>
+
+                            <form id="form-crear-subasta">
+                                <div class="row g-4">
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label class="form-label fw-semibold">Título del Artículo / Subasta <span class="text-danger">*</span></label>
+                                            <input type="text" id="crear-titulo" class="form-control" placeholder="Ej: Reloj Coleccionable de Oro 18k" required>
+                                        </div>
+
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Categoría <span class="text-danger">*</span></label>
+                                                <select id="crear-categoriaId" class="form-select" required>
+                                                    <option value="">Cargando categorías...</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">URL de Imagen del Producto</label>
+                                                <input type="url" id="crear-urlImagen" class="form-control" placeholder="https://ejemplo.com/imagen.jpg">
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label fw-semibold">Descripción Detallada</label>
+                                            <textarea id="crear-descripcion" class="form-control" rows="4" placeholder="Detalla las características del producto..."></textarea>
+                                        </div>
+
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Precio Base ($ ARS) <span class="text-danger">*</span></label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">$</span>
+                                                    <input type="number" id="crear-precioBase" class="form-control" min="1" step="500" value="50000" required>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Incremento Mínimo ($ ARS) <span class="text-danger">*</span></label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text">$</span>
+                                                    <input type="number" id="crear-incrementoMinimo" class="form-control" min="1" step="100" value="2500" required>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="row g-3 mb-4">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Fecha y Hora de Inicio <span class="text-danger">*</span></label>
+                                                <input type="datetime-local" id="crear-fechaInicio" class="form-control" required>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-semibold">Fecha y Hora de Cierre <span class="text-danger">*</span></label>
+                                                <input type="datetime-local" id="crear-fechaFin" class="form-control" required>
+                                            </div>
+                                        </div>
+
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <button type="reset" class="btn btn-light px-4">Limpiar</button>
+                                            <button type="submit" id="btn-crear-subasta" class="btn btn-primary-custom px-4">
+                                                <i class="fa-solid fa-paper-plane me-2"></i> Publicar Subasta
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <div class="card border bg-light p-3 sticky-top" style="top: 20px;">
+                                            <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-eye me-2 text-primary-custom"></i>Vista Previa de Tarjeta</h6>
+                                            <div class="card auction-card shadow-sm">
+                                                <div class="card-img-wrapper">
+                                                    <img id="crear-img-preview" src="assets/images/watch.png" class="card-img-top" alt="Preview">
+                                                    <span class="badge-categoria">Previsualización</span>
+                                                    <span class="badge badge-status bg-success">ACTIVA</span>
+                                                </div>
+                                                <div class="card-body p-3">
+                                                    <h6 class="fw-bold mb-1">Título de tu subasta</h6>
+                                                    <p class="small text-muted mb-2">Descripción de la publicación...</p>
+                                                    <div class="bg-white p-2 rounded border small mb-2">
+                                                        <div class="d-flex justify-content-between">
+                                                            <span>Precio Base:</span>
+                                                            <span class="fw-bold text-success">$50.000</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- =================================================================== -->
+                    <!-- MÓDULO 3: SALA EN VIVO -->
+                    <!-- =================================================================== -->
+                    <div class="tab-pane fade" id="content-sala" role="tabpanel" aria-labelledby="tab-sala">
+                        <div class="card content-card p-4">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom gap-2">
+                                <div>
+                                    <h3 class="text-primary-custom fw-bold mb-1">Sala de Subasta en Vivo</h3>
+                                    <p class="text-muted mb-0">Consola de monitoreo en tiempo real, regla Anti-Sniping e historial anonimizado.</p>
+                                </div>
+                                <div style="min-width: 280px;">
+                                    <select id="sala-subasta-selector" class="form-select border-primary-custom">
+                                        <option value="">-- Seleccionar Subasta --</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div id="sala-banner-liderazgo"></div>
+
+                            <div class="row g-4">
+                                <div class="col-lg-7">
+                                    <div class="live-room-banner p-4 mb-4 shadow">
+                                        <div class="d-flex justify-content-between align-items-start mb-3">
+                                            <div>
+                                                <span id="sala-categoria-badge" class="badge bg-gold text-dark me-2">Tecnología</span>
+                                                <span id="sala-estado-badge" class="badge bg-success">ACTIVA</span>
+                                            </div>
+                                            <div class="d-flex align-items-center text-light small">
+                                                <span class="pulse-dot me-2"></span> Transmisión en Vivo
+                                            </div>
+                                        </div>
+
+                                        <div class="row align-items-center">
+                                            <div class="col-sm-4 mb-3 mb-sm-0 text-center">
+                                                <img id="sala-imagen" src="assets/images/watch.png" class="img-fluid rounded border shadow" style="max-height: 160px; object-fit: cover;" alt="Producto en vivo">
+                                            </div>
+                                            <div class="col-sm-8">
+                                                <h4 id="sala-titulo" class="fw-bold mb-2">Cargando subasta en vivo...</h4>
+                                                <p id="sala-descripcion" class="small opacity-75 mb-3">Selecciona una subasta para ingresar a la sala.</p>
+                                                <div class="d-flex gap-3 small opacity-90">
+                                                    <span><i class="fa-solid fa-store me-1"></i><span id="sala-vendedor">Vendedor: #3</span></span>
+                                                    <span><i class="fa-solid fa-tag me-1"></i>Base: <strong id="sala-precio-base">$0</strong></span>
+                                                    <span><i class="fa-solid fa-turn-up me-1"></i>Incr: <strong id="sala-incremento-min">$0</strong></span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4 pt-3 border-top border-secondary text-center">
+                                            <div class="text-uppercase small tracking-wide opacity-75 mb-1">Tiempo Restante para el Cierre</div>
+                                            <div id="sala-timer-box" class="timer-box">
+                                                <i class="fa-regular fa-hourglass-half text-warning me-2 fs-5"></i>
+                                                <span id="sala-timer-digits" class="timer-digits">00:00:00</span>
+                                            </div>
+                                            <div>
+                                                <span id="sala-antisniping-alert" class="d-none"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="card border-0 shadow-sm p-4 bg-light">
+                                        <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-gavel me-2 text-primary-custom"></i>Realizar Oferta / Puja</h5>
+                                        
+                                        <div class="row align-items-center mb-3">
+                                            <div class="col-6">
+                                                <span class="text-muted small">Puja Mayor Actual:</span>
+                                                <div id="sala-puja-actual" class="fs-3 fw-bold text-success">$0</div>
+                                            </div>
+                                            <div class="col-6 text-end">
+                                                <span class="text-muted small">Estado de Oferta:</span>
+                                                <div id="sala-lider-actual" class="mt-1">
+                                                    <span class="badge bg-secondary">Sin ofertas</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <form id="form-realizar-puja">
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Monto a Ofertar ($ ARS)</label>
+                                                <div class="input-group input-group-lg">
+                                                    <span class="input-group-text">$</span>
+                                                    <input type="number" id="input-monto-puja" class="form-control fw-bold" placeholder="Ingresa monto..." required>
+                                                </div>
+                                            </div>
+
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <span class="small text-muted">Accesos Rápidos:</span>
+                                                <div id="quick-bids-container" class="d-flex gap-2"></div>
+                                            </div>
+
+                                            <button type="submit" id="btn-realizar-puja" class="btn btn-primary-custom btn-lg w-100 py-3">
+                                                <i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja
+                                            </button>
+
+                                            <div class="form-text text-center mt-2 extra-small">
+                                                <i class="fa-solid fa-shield-halved text-success me-1"></i> Se ejecutará retención en Billetera Escrow vía <code>POST /api/Billetera/retener</code>.
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-5">
+                                    <div class="card border p-3 h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                            <h6 class="fw-bold mb-0 text-dark">
+                                                <i class="fa-solid fa-user-secret me-2 text-primary-custom"></i>Historial de Pujas Anonimizado
+                                            </h6>
+                                            <span class="badge bg-light text-dark border">En Vivo</span>
+                                        </div>
+
+                                        <div id="sala-historial-pujas" class="bid-history-list flex-grow-1 pr-1"></div>
+
+                                        <div class="mt-3 pt-3 border-top">
+                                            <div class="bg-light p-2 rounded extra-small text-muted text-center">
+                                                <i class="fa-solid fa-lock me-1 text-primary-custom"></i> Identidades protegidas por hash de privacidad de la plataforma.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- =================================================================== -->
+                    <!-- MÓDULO 4: BILLETERA VIRTUAL -->
+                    <!-- =================================================================== -->
+                    <div class="tab-pane fade" id="content-billetera" role="tabpanel" aria-labelledby="tab-billetera">
+                        <div class="card content-card p-4">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-3 border-bottom gap-2">
+                                <div>
+                                    <h3 class="text-primary-custom fw-bold mb-1">Billetera Virtual y Gestión de Fondos</h3>
+                                    <p class="text-muted mb-0">Consola de saldo libre de prueba para Ramiro Veloso y perfil tester.</p>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-success btn-sm px-3 fw-bold" onclick="cargarSaldoLibreRapido(100000)">
+                                        <i class="fa-solid fa-bolt me-1"></i> +$100.000 Rápido
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm px-3" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo">
+                                        <i class="fa-solid fa-plus-circle me-1"></i> Cargar Saldo Libre...
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="row g-4 mb-4">
+                                <div class="col-md-4">
+                                    <div class="wallet-card-total p-4 shadow-sm">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="text-white-50 text-uppercase fs-7 fw-bold">1. Saldo Total</span>
+                                            <i class="fa-solid fa-vault fs-4 opacity-75"></i>
+                                        </div>
+                                        <h2 id="wallet-saldo-total" class="fw-bold mb-0">$0</h2>
+                                        <div class="small text-white-50 mt-2">Patrimonio acumulado</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="wallet-card-retained p-4 shadow-sm">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="text-white-50 text-uppercase fs-7 fw-bold">2. Saldo Retenido (Escrow)</span>
+                                            <i class="fa-solid fa-lock fs-4 opacity-75"></i>
+                                        </div>
+                                        <h2 id="wallet-saldo-retenido" class="fw-bold mb-0">$0</h2>
+                                        <div class="small text-white-50 mt-2">Garantía comprometida en pujas</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="wallet-card-available p-4 shadow-sm">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="text-white-50 text-uppercase fs-7 fw-bold">3. Saldo Disponible</span>
+                                            <i class="fa-solid fa-wallet fs-4 opacity-75"></i>
+                                        </div>
+                                        <h2 id="wallet-saldo-disponible" class="fw-bold mb-0">$0</h2>
+                                        <div class="small text-white-50 mt-2">Disponible inmediato para pujar</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card border mb-4">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center py-3">
+                                    <h6 class="fw-bold mb-0 text-dark">
+                                        <i class="fa-solid fa-book-bookmark me-2 text-primary-custom"></i>Libro Mayor Contable (Ledger History)
+                                    </h6>
+                                    <span class="extra-small text-muted">Endpoint: <code>GET /api/Billetera/{id}/movimientos</code></span>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light extra-small text-uppercase">
+                                            <tr>
+                                                <th>Tipo Transacción</th>
+                                                <th>Monto ($ ARS)</th>
+                                                <th>Fecha / Hora</th>
+                                                <th>Concepto / Subasta</th>
+                                                <th>Estado Contable</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="wallet-tabla-movimientos"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <div class="card border bg-light p-3">
+                                <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-vial me-2 text-warning"></i>Pruebas Manuales de Fondos Escrow</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <form id="form-test-retener" class="border p-3 rounded bg-white">
+                                            <span class="fw-bold extra-small text-uppercase d-block mb-2 text-warning">Probar Retención Preventiva (/retener)</span>
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <input type="number" id="test-retener-monto" class="form-control form-control-sm" placeholder="Monto $" value="5000" required>
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="number" id="test-retener-subastaId" class="form-control form-control-sm" placeholder="Subasta ID" value="101">
+                                                </div>
+                                                <div class="col-12 mt-2">
+                                                    <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fa-solid fa-lock me-1"></i> Retener en Escrow</button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <form id="form-test-liberar" class="border p-3 rounded bg-white">
+                                            <span class="fw-bold extra-small text-uppercase d-block mb-2 text-info">Probar Liberación de Saldo (/liberar)</span>
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <input type="number" id="test-liberar-monto" class="form-control form-control-sm" placeholder="Monto $" value="5000" required>
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="number" id="test-liberar-subastaId" class="form-control form-control-sm" placeholder="Subasta ID" value="101">
+                                                </div>
+                                                <div class="col-12 mt-2">
+                                                    <button type="submit" class="btn btn-info btn-sm text-dark w-100"><i class="fa-solid fa-key me-1"></i> Liberar Fondos</button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- =================================================================== -->
+                    <!-- MÓDULO 5: MIS ACTIVIDADES -->
+                    <!-- =================================================================== -->
+                    <div class="tab-pane fade" id="content-actividades" role="tabpanel" aria-labelledby="tab-actividades">
+                        <div class="card content-card p-4">
+                            <div class="border-bottom pb-3 mb-4">
+                                <h3 class="text-primary-custom fw-bold mb-1">Mis Actividades en la Plataforma</h3>
+                                <p class="text-muted mb-0">Resumen consolidado de tus ofertas activas, publicaciones y subastas adjudicadas.</p>
+                            </div>
+
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Pujas Realizadas</span>
+                                        <span id="stat-total-pujas" class="fs-2 fw-bold text-primary-custom">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Subastas Publicadas</span>
+                                        <span id="stat-subastas-creadas" class="fs-2 fw-bold text-dark">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Subastas Ganadas</span>
+                                        <span id="stat-subastas-ganadas" class="fs-2 fw-bold text-success">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-4">
+                                <div class="col-12">
+                                    <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-gavel me-2 text-primary-custom"></i>Subastas en las que participo</h5>
+                                    <div id="actividades-mis-pujas" class="row"></div>
+                                </div>
+
+                                <div class="col-12 mt-4">
+                                    <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-store me-2 text-primary-custom"></i>Mis Publicaciones como Vendedor</h5>
+                                    <div id="actividades-mis-publicaciones" class="row"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- MODAL DE CARGA LIBRE DE SALDO PARA TESTER (RAMIRO VELOSO) -->
+    <!-- =================================================================== -->
+    <div class="modal fade" id="modalCargarSaldo" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-coins me-2"></i>Cargar Saldo Libre (Modo Tester)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="form-cargar-saldo">
+                    <div class="modal-body p-4">
+                        <div class="alert alert-success-subtle border border-success-subtle p-3 rounded mb-3">
+                            <h6 class="fw-bold text-success mb-1"><i class="fa-solid fa-user-check me-1"></i> Acreditar fondos libremente</h6>
+                            <p class="extra-small text-muted mb-0">Permite recargar cualquier monto sin restricciones para simular ofertas y probar la billetera.</p>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Monto a Acreditar ($ ARS)</label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text fw-bold">$</span>
+                                <input type="number" id="modal-cargar-monto" class="form-control fw-bold text-success" min="1" step="1000" value="100000" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label extra-small text-muted fw-bold text-uppercase">Cargas Rápidas Preset:</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setMontoCargaLibre(50000)">+$50.000</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setMontoCargaLibre(100000)">+$100.000</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setMontoCargaLibre(500000)">+$500.000</button>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setMontoCargaLibre(1000000)">+$1.000.000</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="fa-solid fa-bolt me-1"></i> Acreditar Fondos Inmediatos</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modales de Errores HTTP 400 y 409 -->
+    <div class="modal fade" id="modalSaldoInsuficiente" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header modal-error-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-triangle-exclamation me-2"></i>Saldo Insuficiente (HTTP 400)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-danger d-flex align-items-center mb-3">
+                        <i class="fa-solid fa-ban fs-2 me-3"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1">No se puede procesar la retención en Escrow</h6>
+                            <p class="extra-small mb-0">La oferta requiere un saldo disponible mayor al disponible en tu billetera actual.</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-light p-3 rounded border mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted small">Saldo Disponible Actual:</span>
+                            <span id="error-saldo-disponible" class="fw-bold text-dark">$0</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted small">Monto Requerido para Puja:</span>
+                            <span id="error-monto-requerido" class="fw-bold text-danger">$0</span>
+                        </div>
+                        <hr class="my-2">
+                        <div class="d-flex justify-content-between">
+                            <span class="fw-bold text-dark small">Faltante a Acreditar:</span>
+                            <span id="error-monto-faltante" class="fw-bold text-danger fs-6">$0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-success" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo">
+                        <i class="fa-solid fa-plus-circle me-1"></i> Cargar Fondos Faltantes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalConcurrencia" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header modal-concurrencia-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-code-compare me-2"></i>Conflicto de Concurrencia (HTTP 409)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <i class="fa-solid fa-bolt-lightning text-warning fa-3x mb-3"></i>
+                    <h5 class="fw-bold text-dark mb-2">¡Otra puja fue recibida en simultáneo!</h5>
+                    <p class="text-muted small mb-3">
+                        El número de versión de la subasta ha cambiado (Optimistic Concurrency Control). Otro comprador envió una oferta justo antes de la tuya.
+                    </p>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-warning text-dark w-100" data-bs-dismiss="modal" onclick="cargarSalaEnVivo(subastaSeleccionadaSala?.id)">
+                        <i class="fa-solid fa-rotate me-1"></i> Entendido, Actualizar Sala
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalCrearUsuario" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary-custom text-white">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-plus me-2"></i>Crear Nuevo Usuario y Billetera</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="form-modal-usuario">
+                    <div class="modal-body p-4">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nombre Completo</label>
+                            <input type="text" id="modal-usuario-nombre" class="form-control" placeholder="Ej: María González" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Correo Electrónico</label>
+                            <input type="email" id="modal-usuario-email" class="form-control" placeholder="maria@ejemplo.com" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary-custom"><i class="fa-solid fa-save me-1"></i> Registrar Usuario</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
