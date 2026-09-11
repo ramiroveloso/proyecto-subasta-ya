@@ -2,44 +2,221 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Prueba Frontend - SubastaYa</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SubastaYa - Panel de Control</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        pre { background: #eee; padding: 10px; border-radius: 4px; }
+        :root {
+            --bg-color: #f8f9fa;
+            --surface-color: #ffffff;
+            --text-main: #212529;
+            --text-muted: #6c757d;
+            --primary-burgundy: #6b1426;
+            --primary-burgundy-hover: #500f1c;
+            --border-color: #dee2e6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+            header h1 {
+                color: var(--primary-burgundy);
+                font-size: 2rem;
+                margin-bottom: 8px;
+            }
+
+            header p {
+                color: var(--text-muted);
+                font-size: 0.95rem;
+            }
+
+        .card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+            .card h2 {
+                font-size: 1.25rem;
+                margin-top: 0;
+                color: var(--primary-burgundy);
+                border-bottom: 2px solid var(--bg-color);
+                padding-bottom: 10px;
+            }
+
+        .btn {
+            background-color: var(--primary-burgundy);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            font-size: 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+            .btn:hover {
+                background-color: var(--primary-burgundy-hover);
+            }
+
+        .grid-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .item-box {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+            font-size: 0.9rem;
+        }
+
+            .item-box img {
+                width: 100%;
+                height: 140px;
+                object-fit: cover;
+            }
+
+        .item-content {
+            padding: 12px;
+        }
+
+        pre {
+            background: #f1f3f5;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            overflow-x: auto;
+            max-height: 200px;
+        }
+
+        .flex-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>Prueba de Conexión con la API</h2>
-        <p>Haz clic para obtener datos desde uno de tus controladores:</p>
-        <button onclick="probarApi()">Consultar API</button>
-        <pre id="resultado">Esperando respuesta...</pre>
+    <div class="container">
+        <header>
+            <h1>SubastaYa</h1>
+            <p>Panel de pruebas de integración para Arquitectura Limpia</p>
+        </header>
+
+        <!-- Sección de Categorías -->
+        <div class="card">
+            <h2>Categorías (Arte y Tecnología)</h2>
+            <p>Consulta las categorías disponibles registradas en el sistema.</p>
+            <button class="btn" onclick="cargarCategorias()">Obtener Categorías</button>
+            <div id="categorias-grid" class="grid-preview"></div>
+        </div>
+
+        <!-- Sección de Subastas -->
+        <div class="card">
+            <h2>Catálogo de Subastas Activas</h2>
+            <p>Monitorea las subastas vigentes conectadas a la base de datos MySQL.</p>
+            <button class="btn" onclick="cargarSubastas()">Consultar Subastas</button>
+            <pre id="subastas-resultado">Haga clic en consultar para ver los datos...</pre>
+        </div>
+
+        <!-- Sección de Billetera -->
+        <div class="card">
+            <h2>Gestión de Billetera</h2>
+            <div class="flex-row">
+                <input type="number" id="usuarioId" placeholder="ID de Usuario" value="1" style="padding: 9px; border: 1px solid var(--border-color); border-radius: 4px;">
+                <button class="btn" onclick="consultarBilletera()">Consultar Saldo</button>
+            </div>
+            <pre id="billetera-resultado" style="margin-top: 16px;">Esperando consulta de saldo...</pre>
+        </div>
     </div>
 
     <script>
-        async function probarApi() {
-            const resultadoPre = document.getElementById('resultado');
-            resultadoPre.textContent = "Cargando...";
-            
+        // Cambia el puerto si tu API levanta en otro diferente (ej. 65102)
+        const API_BASE = 'https://localhost:65102/api';
+
+        async function cargarCategorias() {
+            const grid = document.getElementById('categorias-grid');
+            grid.innerHTML = "Cargando...";
             try {
-                // Reemplaza '7134' por el puerto exacto que te arroja tu consola al iniciar la API
-                const response = await fetch('https://localhost:65102/api/categorias');
-                
-                if (!response.ok) {
-                    throw new Error(`Error HTTP: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                resultadoPre.textContent = JSON.stringify(data, null, 2);
+                const response = await fetch(`${API_BASE}/Categorias`);
+                if (!response.ok) throw new Error('Error al conectar con el servidor');
+                const categorias = await response.json();
+
+                grid.innerHTML = '';
+                // Imágenes temáticas aleatorias de arte y tecnología de Unsplash Source
+                const imagenesTechArt = [
+                    "https://images.unsplash.com/photo-1518770660439-4636190af475?w=500&auto=format&fit=crop&q=60",
+                    "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=500&auto=format&fit=crop&q=60",
+                    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=500&auto=format&fit=crop&q=60",
+                    "https://images.unsplash.com/photo-1544816155-12df9643f363?w=500&auto=format&fit=crop&q=60"
+                ];
+
+                categorias.forEach((cat, index) => {
+                    const imgUrl = imagenesTechArt[index % imagenesTechArt.length];
+                    const div = document.createElement('div');
+                    div.className = 'item-box';
+                    div.innerHTML = `
+                            <img src="${imgUrl}" alt="Arte y Tecnología">
+                            <div class="item-content">
+                                <strong>${cat.nombre || cat.Nombre || 'Categoría'}</strong>
+                                <p style="margin: 4px 0 0 0; color: #666; font-size: 0.8rem;">ID: ${cat.id || cat.Id}</p>
+                            </div>
+                        `;
+                    grid.appendChild(div);
+                });
             } catch (error) {
-                resultadoPre.textContent = "Error al conectar con la API: " + error.message;
+                grid.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+            }
+        }
+
+        async function cargarSubastas() {
+            const pre = document.getElementById('subastas-resultado');
+            pre.textContent = "Cargando subastas...";
+            try {
+                const response = await fetch(`${API_BASE}/Subastas`);
+                if (!response.ok) throw new Error('Error al obtener las subastas');
+                const data = await response.json();
+                pre.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                pre.textContent = "Error de conexión: " + error.message;
+            }
+        }
+
+        async function consultarBilletera() {
+            const usuarioId = document.getElementById('usuarioId').value;
+            const pre = document.getElementById('billetera-resultado');
+            pre.textContent = "Consultando billetera...";
+            try {
+                const response = await fetch(`${API_BASE}/Billetera/${usuarioId}`);
+                if (!response.ok) throw new Error('No se encontró la billetera para este usuario');
+                const data = await response.json();
+                pre.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                pre.textContent = "Error: " + error.message;
             }
         }
     </script>
-
 </body>
 </html>
