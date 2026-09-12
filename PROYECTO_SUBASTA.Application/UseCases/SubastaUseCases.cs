@@ -55,5 +55,49 @@ namespace PROYECTO_SUBASTA.Application.UseCases
 
             return subasta;
         }
+        // Registra una puja en una subasta específica aplicando reglas de validación de negocio y control de concurrencia optimista.
+        public async Task RegistrarPujaAsync(int subastaId, int usuarioId, decimal montoPuja, int versionCliente)
+        {
+            var subasta = await _subastaRepository.ObtenerPorIdAsync(subastaId);
+            if (subasta == null)
+            {
+                throw new KeyNotFoundException("La subasta especificada no existe.");
+            }
+
+            if (subasta.Estado != "ACTIVA")
+            {
+                throw new InvalidOperationException("No se pueden realizar pujas en una subasta que no está activa.");
+            }
+
+            decimal pujaMaximaActual = (subasta.Pujas != null && subasta.Pujas.Count > 0)
+                ? subasta.Pujas.Max(p => p.Monto)
+                : subasta.PrecioBase;
+
+            if (montoPuja <= pujaMaximaActual)
+            {
+                throw new ArgumentException($"La puja debe superar la oferta actual de ${pujaMaximaActual}.");
+            }
+
+            if ((montoPuja - pujaMaximaActual) < subasta.IncrementoMinimo && subasta.Pujas != null && subasta.Pujas.Count > 0)
+            {
+                throw new ArgumentException($"El incremento mínimo requerido es de ${subasta.IncrementoMinimo}.");
+            }
+
+            var nuevaPuja = new Puja
+            {
+                SubastaId = subastaId,
+                UsuarioId = usuarioId,
+                Monto = montoPuja,
+                FechaCreacion = DateTime.UtcNow
+            };
+
+            if (subasta.Pujas == null) subasta.Pujas = new List<Puja>();
+            subasta.Pujas.Add(nuevaPuja);
+
+            // Incrementamos la versión para disparar la concurrencia optimista en EF Core
+            subasta.Version += 1;
+
+            await _subastaRepository.GuardarCambiosAsync();
+        }
     }
 }

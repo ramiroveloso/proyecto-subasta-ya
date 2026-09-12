@@ -45,5 +45,17 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
         {
             await SaveChangesAsync();
         }
+        public async Task ActualizarConConcurrenciaAsync(Subasta subasta, int versionCliente)
+        {
+            // 1. Establecemos la versión que mandó el cliente como el valor original que EF espera encontrar
+            _context.Entry(subasta).Property(s => s.Version).OriginalValue = (uint)versionCliente;
+
+            // 2. Incrementamos explícitamente el valor actual en memoria
+            subasta.Version = (uint)(versionCliente + 1);
+
+            // 3. Marcamos la entidad como modificada y guardamos
+            _context.Entry(subasta).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
+        }
     }
 }

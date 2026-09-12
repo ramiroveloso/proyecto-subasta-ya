@@ -18,5 +18,7 @@ namespace PROYECTO_SUBASTA.Application.Repositories
 
         // Definimos el contrato para consolidar y guardar físicamente los cambios transaccionales en la base de datos.
         Task GuardarCambiosAsync();
+        //se actualiza el valor de la version para usar en caso de concurrencia 
+        Task ActualizarConConcurrenciaAsync(Subasta subasta, int versionCliente);
     }
 }

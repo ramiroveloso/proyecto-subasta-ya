@@ -10,10 +10,45 @@ let categoriasCache = [];
 let subastaSeleccionadaSala = null;
 let timerSalaInterval = null;
 let timerCardsInterval = null;
+let contadorSyncInterval = 0;
+
+/* ==========================================================================
+   MODO OSCURO / CLARO (THEME CONTROLLER)
+   ========================================================================== */
+
+function inicializarModoOscuro() {
+    const temaGuardado = localStorage.getItem('subastaya-theme') || 'light';
+    aplicarTema(temaGuardado);
+}
+
+function toggleDarkMode() {
+    const temaActual = document.documentElement.getAttribute('data-bs-theme') || 'light';
+    const nuevoTema = (temaActual === 'dark') ? 'light' : 'dark';
+    aplicarTema(nuevoTema);
+    localStorage.setItem('subastaya-theme', nuevoTema);
+}
+
+function aplicarTema(tema) {
+    document.documentElement.setAttribute('data-bs-theme', tema);
+    const icon = document.getElementById('theme-toggle-icon');
+    const text = document.getElementById('theme-toggle-text');
+    const btn = document.getElementById('btn-theme-toggle');
+
+    if (tema === 'dark') {
+        if (icon) icon.className = 'fa-solid fa-sun text-warning';
+        if (text) text.textContent = 'Modo Claro';
+        if (btn) btn.setAttribute('title', 'Cambiar a Modo Claro');
+    } else {
+        if (icon) icon.className = 'fa-solid fa-moon text-warning';
+        if (text) text.textContent = 'Modo Oscuro';
+        if (btn) btn.setAttribute('title', 'Cambiar a Modo Oscuro');
+    }
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
+    inicializarModoOscuro();
     inicializarFechasFormulario();
-    renderizarSelectorPerfilesSemilla();
+    await renderizarSelectorPerfilesSemilla();
     configurarEventosUI();
     
     await cargarCategorias();
@@ -26,26 +61,43 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 /* ==========================================================================
    PERFILES SEMILLA & USUARIO TESTER (RAMIRO VELOSO)
+   SINCRONISMO DE SALDOS EN TIEMPO REAL
    ========================================================================== */
 
-function renderizarSelectorPerfilesSemilla() {
+async function renderizarSelectorPerfilesSemilla() {
     const dropdownMenu = document.getElementById('dropdown-perfiles-semilla');
     if (!dropdownMenu) return;
 
-    dropdownMenu.innerHTML = '<li><h6 class="dropdown-header text-uppercase extra-small fw-bold">Perfil Tester Principal</h6></li>';
+    dropdownMenu.innerHTML = '<li><h6 class="dropdown-header text-uppercase extra-small fw-bold">Perfiles de Prueba / Tester</h6></li>';
     
-    PERFILES_SEMILLA.forEach(p => {
+    // Obtenemos los saldos actuales de todas las billeteras en paralelo
+    const billeteras = await Promise.all(
+        PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
+    );
+
+    PERFILES_SEMILLA.forEach((p, idx) => {
+        const b = billeteras[idx];
+        const saldoDisp = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? p.saldoInicial) : p.saldoInicial;
+        const saldoRet = b ? (b.saldoRetenido ?? b.SaldoRetenido ?? 0) : 0;
         const esRamiro = p.email === 'ramiro.veloso@tester.com';
+        const esActivo = p.id === usuarioActual.id;
+
         dropdownMenu.innerHTML += `
             <li>
-                <a class="dropdown-item d-flex align-items-center justify-content-between py-2 ${p.id === usuarioActual.id ? 'active fw-bold' : ''}" href="#" onclick="cambiarPerfilSemilla(${p.id})">
-                    <div>
+                <a class="dropdown-item d-flex align-items-center justify-content-between py-2 ${esActivo ? 'active fw-bold' : ''}" 
+                   href="#" onclick="cambiarPerfilSemilla(${p.id}); return false;" data-dropdown-user-id="${p.id}">
+                    <div class="me-2">
                         <div class="fw-bold">${esRamiro ? '<i class="fa-solid fa-star text-warning me-1"></i>' : ''}${p.nombre}</div>
                         <div class="extra-small opacity-75">${p.email}</div>
                     </div>
-                    <span class="badge ${p.saldoInicial > 0 ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle'}">
-                        $${p.saldoInicial.toLocaleString()}
-                    </span>
+                    <div class="text-end">
+                        <span class="badge badge-saldo font-monospace ${saldoDisp > 0 ? (esActivo ? 'bg-light text-dark' : 'bg-success-subtle text-success border border-success-subtle') : 'bg-danger-subtle text-danger border border-danger-subtle'}">
+                            $${saldoDisp.toLocaleString('es-AR')}
+                        </span>
+                        <div class="retencion-info extra-small ${saldoRet > 0 ? (esActivo ? 'text-warning' : 'text-warning-emphasis') : 'd-none'}" style="font-size: 0.72rem;">
+                            ${saldoRet > 0 ? `(Ret: $${saldoRet.toLocaleString('es-AR')})` : ''}
+                        </div>
+                    </div>
                 </a>
             </li>
         `;
@@ -61,6 +113,78 @@ function renderizarSelectorPerfilesSemilla() {
         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo"><i class="fa-solid fa-wallet me-2 text-primary-custom"></i>Consola Carga Libre de Saldo...</a></li>
         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario"><i class="fa-solid fa-user-plus me-2 text-secondary"></i>Crear Nuevo Usuario</a></li>
     `;
+
+    // Sincronizar badge de saldo del usuario activo en el botón de la barra superior
+    const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
+    const saldoActualDisp = bActual ? (bActual.saldoDisponible ?? bActual.SaldoDisponible ?? usuarioActual.saldoInicial) : usuarioActual.saldoInicial;
+    const navBadge = document.getElementById('nav-user-saldo');
+    if (navBadge) {
+        navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
+        navBadge.className = `badge font-monospace ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
+    }
+}
+
+async function sincronizarSaldosDropdown() {
+    try {
+        const billeteras = await Promise.all(
+            PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
+        );
+
+        PERFILES_SEMILLA.forEach((p, idx) => {
+            const b = billeteras[idx];
+            if (!b) return;
+            const saldoDisp = b.saldoDisponible ?? b.SaldoDisponible ?? 0;
+            const saldoRet = b.saldoRetenido ?? b.SaldoRetenido ?? 0;
+            actualizarBadgeUsuarioEnDropdown(p.id, saldoDisp, saldoRet);
+        });
+
+        // Actualizar el saldo del usuario activo en la barra superior
+        const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
+        if (bActual) {
+            const saldoActualDisp = bActual.saldoDisponible ?? bActual.SaldoDisponible ?? 0;
+            const navBadge = document.getElementById('nav-user-saldo');
+            if (navBadge) {
+                navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
+                navBadge.className = `badge font-monospace ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
+            }
+        }
+    } catch (err) {
+        console.warn("[SubastaYa] Error al sincronizar saldos en dropdown:", err);
+    }
+}
+
+function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo, nuevoSaldoRetenido = 0) {
+    const item = document.querySelector(`[data-dropdown-user-id="${usuarioId}"]`);
+    if (item) {
+        const esActivo = (usuarioId === usuarioActual.id);
+        const badgeUsuario = item.querySelector('.badge-saldo');
+        if (badgeUsuario) {
+            badgeUsuario.textContent = `$${nuevoSaldo.toLocaleString('es-AR')}`;
+            badgeUsuario.className = `badge badge-saldo font-monospace ${
+                nuevoSaldo > 0 ? 
+                    (esActivo ? 'bg-light text-dark' : 'bg-success-subtle text-success border border-success-subtle') : 
+                    'bg-danger-subtle text-danger border border-danger-subtle'
+            }`;
+        }
+        const retInfo = item.querySelector('.retencion-info');
+        if (retInfo) {
+            if (nuevoSaldoRetenido > 0) {
+                retInfo.textContent = `(Ret: $${nuevoSaldoRetenido.toLocaleString('es-AR')})`;
+                retInfo.className = `retencion-info extra-small ${esActivo ? 'text-warning' : 'text-warning-emphasis'}`;
+            } else {
+                retInfo.textContent = '';
+                retInfo.className = 'retencion-info extra-small d-none';
+            }
+        }
+    }
+
+    if (usuarioId === usuarioActual.id) {
+        const navBadge = document.getElementById('nav-user-saldo');
+        if (navBadge) {
+            navBadge.textContent = `$${nuevoSaldo.toLocaleString('es-AR')}`;
+            navBadge.className = `badge font-monospace ${nuevoSaldo > 0 ? 'bg-success' : 'bg-danger'}`;
+        }
+    }
 }
 
 async function cambiarPerfilSemilla(usuarioId) {
@@ -70,7 +194,7 @@ async function cambiarPerfilSemilla(usuarioId) {
     usuarioActual = perfil;
     document.getElementById('wallet-usuario-info').textContent = `${perfil.nombre} (${perfil.email})`;
 
-    renderizarSelectorPerfilesSemilla();
+    await renderizarSelectorPerfilesSemilla();
     await actualizarBilleteraUI();
     await cargarMisActividades();
 
@@ -87,11 +211,9 @@ async function cargarSaldoLibreRapido(monto) {
         await fetchCargarSaldo(usuarioActual.id, monto);
         mostrarToast(`⚡ <strong>¡Carga Libre Acreditada!</strong> +$${monto.toLocaleString()} añadidos al disponible de ${usuarioActual.nombre}.`, 'Fondos Acreditados (Modo Tester)', 'success');
         
+        usuarioActual.saldoInicial = (usuarioActual.saldoInicial || 0) + monto;
         await actualizarBilleteraUI();
-        
-        // Actualizamos los datos del usuario actual para reflejar el nuevo saldo en memoria
-        usuarioActual.saldoInicial += monto;
-        renderizarSelectorPerfilesSemilla();
+        await renderizarSelectorPerfilesSemilla();
     } catch (e) {
         mostrarToast(`Error al recargar: ${e.message}`, 'Error', 'danger');
     }
@@ -100,14 +222,6 @@ async function cargarSaldoLibreRapido(monto) {
 function setMontoCargaLibre(monto) {
     const input = document.getElementById('modal-cargar-monto');
     if (input) input.value = monto;
-}
-/**actualizacion de badge */
-function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo) {
-    // Buscamos el elemento visual del badge del usuario en el menú desplegable (por ejemplo, usando un atributo data-usuario-id o clase específica)
-    const badgeUsuario = document.querySelector(`[data-dropdown-user-id="${usuarioId}"] .badge-saldo`);
-    if (badgeUsuario) {
-        badgeUsuario.textContent = `$${nuevoSaldo.toLocaleString('es-AR')}`;
-    }
 }
 /* ==========================================================================
    MÓDULO 1: CATÁLOGO Y EXPLORACIÓN
@@ -282,6 +396,12 @@ function actualizarTemporizadoresCatalogo() {
             t.innerHTML = `${format(horas)}h ${format(minutos)}m ${format(segundos)}s`;
         }
     });
+
+    // Sincronización periódica de saldos de los usuarios cada 4 segundos
+    contadorSyncInterval++;
+    if (contadorSyncInterval % 4 === 0) {
+        sincronizarSaldosDropdown();
+    }
 }
 
 /* ==========================================================================
@@ -622,14 +742,22 @@ async function enviarPuja(event) {
     }
 
     try {
+        const pujasPrevias = subastaSeleccionadaSala.pujas || [];
+        let pujaPreviaLiberar = null;
+        if (pujasPrevias.length > 0) {
+            pujaPreviaLiberar = pujasPrevias[pujasPrevias.length - 1];
+        }
+
+        if (pujaPreviaLiberar && pujaPreviaLiberar.usuarioId === usuarioActual.id) {
+            // Mismo usuario incrementa su oferta: liberar la retención anterior para contar con los fondos
+            await fetchLiberarSaldo(usuarioActual.id, pujaPreviaLiberar.monto, subastaSeleccionadaSala.id);
+        }
+
         await fetchRetenerSaldo(usuarioActual.id, montoInput, subastaSeleccionadaSala.id);
 
-        const pujasPrevias = subastaSeleccionadaSala.pujas || [];
-        if (pujasPrevias.length > 0) {
-            const ultimaPujaPrevia = pujasPrevias[pujasPrevias.length - 1];
-            if (ultimaPujaPrevia.usuarioId !== usuarioActual.id) {
-                await fetchLiberarSaldo(ultimaPujaPrevia.usuarioId, ultimaPujaPrevia.monto, subastaSeleccionadaSala.id);
-            }
+        if (pujaPreviaLiberar && pujaPreviaLiberar.usuarioId !== usuarioActual.id) {
+            // Se superó la oferta del postor anterior (Outbid): liberar su garantía Escrow
+            await fetchLiberarSaldo(pujaPreviaLiberar.usuarioId, pujaPreviaLiberar.monto, subastaSeleccionadaSala.id);
         }
 
         const ahora = new Date().getTime();
@@ -669,6 +797,7 @@ async function enviarPuja(event) {
         actualizarMonitorPujasSala();
         configurarBotonesPujaRapida(incrementoMin);
         await actualizarBilleteraUI();
+        await sincronizarSaldosDropdown();
         await cargarMisActividades();
 
     } catch (err) {
@@ -691,11 +820,24 @@ async function actualizarBilleteraUI() {
         const billetera = await fetchObtenerBilletera(usuarioActual.id);
         const movimientos = await fetchObtenerMovimientos(usuarioActual.id);
 
+        const saldoDisp = billetera.saldoDisponible ?? billetera.SaldoDisponible ?? 0;
+        const saldoRet = billetera.saldoRetenido ?? billetera.SaldoRetenido ?? 0;
+        const saldoTot = billetera.saldoTotal ?? billetera.SaldoTotal ?? 0;
+
         document.getElementById('wallet-usuario-info').textContent = `${usuarioActual.nombre} (${usuarioActual.email})`;
         
-        document.getElementById('wallet-saldo-total').textContent = `$${billetera.saldoTotal.toLocaleString()}`;
-        document.getElementById('wallet-saldo-retenido').textContent = `$${billetera.saldoRetenido.toLocaleString()}`;
-        document.getElementById('wallet-saldo-disponible').textContent = `$${billetera.saldoDisponible.toLocaleString()}`;
+        const navSaldo = document.getElementById('nav-user-saldo');
+        if (navSaldo) {
+            navSaldo.textContent = `$${saldoDisp.toLocaleString('es-AR')}`;
+            navSaldo.className = `badge font-monospace ${saldoDisp > 0 ? 'bg-success' : 'bg-danger'}`;
+        }
+
+        document.getElementById('wallet-saldo-total').textContent = `$${saldoTot.toLocaleString('es-AR')}`;
+        document.getElementById('wallet-saldo-retenido').textContent = `$${saldoRet.toLocaleString('es-AR')}`;
+        document.getElementById('wallet-saldo-disponible').textContent = `$${saldoDisp.toLocaleString('es-AR')}`;
+
+        // Sincronizar saldos de los usuarios en el menú desplegable superior derecho
+        await sincronizarSaldosDropdown();
 
         const tbody = document.getElementById('wallet-tabla-movimientos');
         if (!tbody) return;
@@ -757,7 +899,9 @@ async function procesarCargaSaldoModal(event) {
         if (modal) modal.hide();
 
         document.getElementById('form-cargar-saldo').reset();
+        usuarioActual.saldoInicial = (usuarioActual.saldoInicial || 0) + monto;
         await actualizarBilleteraUI();
+        await renderizarSelectorPerfilesSemilla();
 
     } catch (err) {
         mostrarToast(`Error al cargar saldo: ${err.message}`, 'Error', 'danger');
@@ -773,6 +917,7 @@ async function procesarRetencionManual(event) {
         await fetchRetenerSaldo(usuarioActual.id, monto, subastaId);
         mostrarToast(`Saldo de $${monto.toLocaleString()} retenido preventivamente en Escrow.`, 'Retención Ejecutada', 'info');
         await actualizarBilleteraUI();
+        await sincronizarSaldosDropdown();
     } catch (e) {
         if (e.status === 400 || e.status === 422 || e.message.includes('saldo insuficiente')) {
             abrirModalSaldoInsuficiente(monto);
@@ -791,6 +936,7 @@ async function procesarLiberacionManual(event) {
         await fetchLiberarSaldo(usuarioActual.id, monto, subastaId);
         mostrarToast(`Saldo de $${monto.toLocaleString()} liberado de Escrow.`, 'Fondos Liberados', 'success');
         await actualizarBilleteraUI();
+        await sincronizarSaldosDropdown();
     } catch (e) {
         mostrarToast(e.message, 'Error', 'danger');
     }
@@ -814,7 +960,7 @@ async function procesarCrearUsuario(event) {
         };
 
         PERFILES_SEMILLA.push(nuevoPerfil);
-        cambiarPerfilSemilla(nuevoPerfil.id);
+        await cambiarPerfilSemilla(nuevoPerfil.id);
 
         const modalElem = document.getElementById('modalCrearUsuario');
         const modal = bootstrap.Modal.getInstance(modalElem);
@@ -988,6 +1134,13 @@ function configurarEventosUI() {
             }
         });
     });
+
+    const dropdownUserContainer = document.getElementById('dropdown-perfiles-semilla')?.closest('.dropdown');
+    if (dropdownUserContainer) {
+        dropdownUserContainer.addEventListener('show.bs.dropdown', async () => {
+            await sincronizarSaldosDropdown();
+        });
+    }
 }
 
 function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info') {

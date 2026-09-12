@@ -1,9 +1,15 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SubastaYa - Dashboard & Consola Tester Ramiro Veloso</title>
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('subastaya-theme') || 'light';
+            document.documentElement.setAttribute('data-bs-theme', savedTheme);
+        })();
+    </script>
     <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +24,7 @@
 <body>
 
     <!-- Navbar Superior Corporativo con Perfil Principal Tester Ramiro Veloso -->
-    <nav class="navbar navbar-dark navbar-custom shadow-sm py-2">
+    <nav class="navbar navbar-dark navbar-custom shadow-sm py-2 sticky-top">
         <div class="container-fluid px-4">
             <div class="d-flex align-items-center">
                 <span class="navbar-brand mb-0 h1 fs-3 fw-bold me-3">
@@ -29,18 +35,26 @@
                 </span>
             </div>
             
-            <div class="d-flex align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2 gap-md-3">
                 <div id="api-status-badge" class="api-status-badge badge bg-secondary text-white">
                     <i class="fa-solid fa-spinner fa-spin me-1"></i> Comprobando API...
                 </div>
 
+                <!-- Botón Modo Oscuro / Modo Claro -->
+                <button id="btn-theme-toggle" class="btn btn-outline-light btn-sm rounded-pill px-3 fw-medium d-flex align-items-center gap-2" type="button" title="Alternar modo oscuro / claro" onclick="toggleDarkMode()">
+                    <i id="theme-toggle-icon" class="fa-solid fa-moon text-warning"></i>
+                    <span id="theme-toggle-text" class="d-none d-sm-inline">Modo Oscuro</span>
+                </button>
+
                 <!-- Dropdown de Perfiles Semilla con Ramiro Veloso Tester como por Defecto -->
                 <div class="dropdown">
-                    <button class="btn btn-outline-light btn-sm dropdown-toggle rounded-pill px-3 fw-medium" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fa-solid fa-user-gear me-1 text-warning"></i> <span id="wallet-usuario-info">Ramiro Veloso (ramiro.veloso@tester.com)</span>
+                    <button class="btn btn-outline-light btn-sm dropdown-toggle rounded-pill px-3 fw-medium d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="dropdownUserButton">
+                        <i class="fa-solid fa-user-gear text-warning"></i>
+                        <span id="wallet-usuario-info" class="text-truncate" style="max-width: 260px;">Ramiro Veloso (ramiro.veloso@tester.com)</span>
+                        <span id="nav-user-saldo" class="badge bg-success font-monospace" title="Saldo disponible en tiempo real">$500.000</span>
                     </button>
-                    <ul id="dropdown-perfiles-semilla" class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width: 300px;">
-                        <!-- Renderizado dinámicamente -->
+                    <ul id="dropdown-perfiles-semilla" class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width: 320px;">
+                        <!-- Renderizado dinámicamente con saldos en tiempo real -->
                     </ul>
                 </div>
             </div>
