@@ -1,0 +1,379 @@
+/* ==========================================================================
+   SubastaYa - Estilos Corporativos Bordó & Dashboard Moderno
+   ========================================================================== */
+
+:root {
+    --primary-color: #581845;
+    --primary-hover: #3e1030;
+    --primary-light: #7b225f;
+    --primary-soft: rgba(88, 24, 69, 0.08);
+    --primary-border: rgba(88, 24, 69, 0.2);
+    
+    --accent-gold: #d4af37;
+    --accent-gold-hover: #b89628;
+    --accent-danger: #c70039;
+    --accent-success: #198754;
+    --accent-info: #0dcaf0;
+
+    --bg-main: #f4f6f9;
+    --bg-card: #ffffff;
+    --text-dark: #1e293b;
+    --text-muted: #64748b;
+    --border-light: #e2e8f0;
+}
+
+body {
+    background-color: var(--bg-main);
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: var(--text-dark);
+}
+
+/* --- Utility Classes --- */
+.bg-primary-custom {
+    background-color: var(--primary-color) !important;
+}
+
+.text-primary-custom {
+    color: var(--primary-color) !important;
+}
+
+.btn-primary-custom {
+    background-color: var(--primary-color);
+    color: #ffffff;
+    border: 1px solid var(--primary-color);
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-primary-custom:hover, 
+.btn-primary-custom:focus {
+    background-color: var(--primary-hover);
+    color: #ffffff;
+    border-color: var(--primary-hover);
+    box-shadow: 0 4px 12px rgba(88, 24, 69, 0.25);
+}
+
+.btn-outline-primary-custom {
+    border: 1.5px solid var(--primary-color);
+    color: var(--primary-color);
+    background-color: transparent;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-outline-primary-custom:hover {
+    background-color: var(--primary-color);
+    color: #ffffff;
+}
+
+.btn-gold {
+    background-color: var(--accent-gold);
+    color: #1a1a1a;
+    font-weight: 600;
+    border: none;
+}
+
+.btn-gold:hover {
+    background-color: var(--accent-gold-hover);
+    color: #000000;
+}
+
+/* --- Header / Navbar --- */
+.navbar-custom {
+    background: linear-gradient(135deg, #581845 0%, #3e1030 100%);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.api-status-badge {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 50rem;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* --- Sidebar Navigation (Tabs) --- */
+.sidebar-card {
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+}
+
+.nav-pills .nav-link {
+    color: #475569;
+    font-weight: 500;
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    border-left: 4px solid transparent;
+}
+
+.nav-pills .nav-link:hover {
+    background-color: var(--primary-soft);
+    color: var(--primary-color);
+}
+
+.nav-pills .nav-link.active {
+    background-color: var(--primary-color);
+    color: #ffffff;
+    border-left-color: var(--accent-gold);
+    box-shadow: 0 4px 12px rgba(88, 24, 69, 0.2);
+}
+
+.nav-pills .nav-link i {
+    width: 24px;
+    font-size: 1.1rem;
+}
+
+/* --- Cards & Catalog --- */
+.auction-card {
+    border-radius: 14px;
+    border: 1px solid var(--border-light);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.auction-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08) !important;
+}
+
+.auction-card .card-img-wrapper {
+    position: relative;
+    overflow: hidden;
+    height: 190px;
+    background-color: #e2e8f0;
+}
+
+.auction-card .card-img-top {
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.auction-card:hover .card-img-top {
+    transform: scale(1.04);
+}
+
+.badge-status {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.4em 0.8em;
+    border-radius: 50rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.badge-categoria {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    backdrop-filter: blur(4px);
+    padding: 0.3em 0.7em;
+    border-radius: 6px;
+}
+
+.content-card {
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+/* --- Wallet Balance Cards (Model Metrics) --- */
+.wallet-card-total {
+    background: linear-gradient(135deg, #581845 0%, #3e1030 100%);
+    color: white;
+    border-radius: 14px;
+}
+
+.wallet-card-available {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: white;
+    border-radius: 14px;
+}
+
+.wallet-card-retained {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    color: white;
+    border-radius: 14px;
+}
+
+/* --- Live Auction Room Styling & Regla Anti-Sniping --- */
+.live-room-banner {
+    background: linear-gradient(135deg, #1e1e24 0%, #2d182b 100%);
+    color: white;
+    border-radius: 16px;
+    transition: all 0.3s ease;
+}
+
+.timer-box {
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    padding: 0.85rem 1.5rem;
+    display: inline-block;
+    transition: all 0.3s ease;
+}
+
+.timer-digits {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    font-size: 2.2rem;
+    color: #38ef7d;
+    letter-spacing: 3px;
+    text-shadow: 0 0 10px rgba(56, 239, 125, 0.5);
+    transition: color 0.3s ease;
+}
+
+/* Alerta Anti-Sniping: Warning (< 5 minutos) */
+.timer-box.timer-warning-alert {
+    border-color: #ffc107;
+    background: rgba(255, 193, 7, 0.15);
+}
+
+.timer-box.timer-warning-alert .timer-digits {
+    color: #ffc107;
+    text-shadow: 0 0 12px rgba(255, 193, 7, 0.7);
+}
+
+/* Alerta Anti-Sniping: ZONA CRÍTICA (< 60 segundos) */
+.timer-box.timer-critical-alert {
+    border-color: #ff4757;
+    background: rgba(255, 71, 87, 0.25);
+    animation: alert-pulse-bg 1s infinite alternate;
+}
+
+.timer-box.timer-critical-alert .timer-digits {
+    color: #ff4757;
+    text-shadow: 0 0 18px rgba(255, 71, 87, 0.9);
+}
+
+@keyframes alert-pulse-bg {
+    0% {
+        box-shadow: 0 0 15px rgba(255, 71, 87, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 30px rgba(255, 71, 87, 0.8);
+    }
+}
+
+.anti-sniping-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 0.3rem 0.8rem;
+    border-radius: 50rem;
+    display: inline-block;
+    animation: flash-badge 1s infinite;
+}
+
+@keyframes flash-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* Status Banner de Liderazgo (Liderando / Outbid) */
+.status-banner-leading {
+    background-color: #d1e7dd;
+    border: 1.5px solid #0f5132;
+    color: #0f5132;
+    border-radius: 12px;
+}
+
+.status-banner-outbid {
+    background-color: #f8d7da;
+    border: 1.5px solid #842029;
+    color: #842029;
+    border-radius: 12px;
+    animation: shake-outbid 0.5s ease-in-out;
+}
+
+@keyframes shake-outbid {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+}
+
+/* Historial de Pujas Anonimizado */
+.bid-history-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.bid-item {
+    border-left: 4px solid var(--primary-color);
+    background-color: #f8fafc;
+    border-radius: 0 10px 10px 0;
+    transition: all 0.2s ease;
+}
+
+.bid-item.highest {
+    border-left-color: var(--accent-gold);
+    background-color: #fffbeb;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.15);
+}
+
+.badge-postor-anon {
+    background-color: #e2e8f0;
+    color: #334155;
+    font-family: monospace;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+}
+
+.badge-postor-tu {
+    background-color: var(--primary-color);
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+}
+
+.pulse-dot {
+    width: 10px;
+    height: 10px;
+    background-color: #2ed573;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 rgba(46, 213, 115, 0.4);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(46, 213, 115, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(46, 213, 115, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(46, 213, 115, 0); }
+}
+
+/* --- Modales de Errores y Validaciones (HTTP 400, 409, 422) --- */
+.modal-error-header {
+    background: linear-gradient(135deg, #c70039 0%, #900028 100%);
+    color: white;
+}
+
+.modal-concurrencia-header {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    color: white;
+}
+
+/* --- Toast Container --- */
+.toast-container {
+    z-index: 1090;
+}
