@@ -86,7 +86,12 @@ async function cargarSaldoLibreRapido(monto) {
     try {
         await fetchCargarSaldo(usuarioActual.id, monto);
         mostrarToast(`⚡ <strong>¡Carga Libre Acreditada!</strong> +$${monto.toLocaleString()} añadidos al disponible de ${usuarioActual.nombre}.`, 'Fondos Acreditados (Modo Tester)', 'success');
+        
         await actualizarBilleteraUI();
+        
+        // Actualizamos los datos del usuario actual para reflejar el nuevo saldo en memoria
+        usuarioActual.saldoInicial += monto;
+        renderizarSelectorPerfilesSemilla();
     } catch (e) {
         mostrarToast(`Error al recargar: ${e.message}`, 'Error', 'danger');
     }
@@ -96,7 +101,14 @@ function setMontoCargaLibre(monto) {
     const input = document.getElementById('modal-cargar-monto');
     if (input) input.value = monto;
 }
-
+/**actualizacion de badge */
+function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo) {
+    // Buscamos el elemento visual del badge del usuario en el menú desplegable (por ejemplo, usando un atributo data-usuario-id o clase específica)
+    const badgeUsuario = document.querySelector(`[data-dropdown-user-id="${usuarioId}"] .badge-saldo`);
+    if (badgeUsuario) {
+        badgeUsuario.textContent = `$${nuevoSaldo.toLocaleString('es-AR')}`;
+    }
+}
 /* ==========================================================================
    MÓDULO 1: CATÁLOGO Y EXPLORACIÓN
    ========================================================================== */
