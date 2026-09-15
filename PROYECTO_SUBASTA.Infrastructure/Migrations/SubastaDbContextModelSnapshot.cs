@@ -202,7 +202,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         new
                         {
                             Id = 1,
-                            FechaCreacion = new DateTime(2026, 9, 11, 3, 50, 40, 691, DateTimeKind.Utc).AddTicks(1139),
+                            FechaCreacion = new DateTime(2026, 9, 15, 1, 56, 57, 740, DateTimeKind.Utc).AddTicks(9308),
                             Monto = 35000.00m,
                             SubastaId = 1,
                             UsuarioId = 3
@@ -210,7 +210,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         new
                         {
                             Id = 2,
-                            FechaCreacion = new DateTime(2026, 9, 11, 4, 0, 40, 691, DateTimeKind.Utc).AddTicks(1141),
+                            FechaCreacion = new DateTime(2026, 9, 15, 2, 6, 57, 740, DateTimeKind.Utc).AddTicks(9310),
                             Monto = 45000.00m,
                             SubastaId = 1,
                             UsuarioId = 2
@@ -266,6 +266,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<uint>("Version")
+                        .IsConcurrencyToken()
                         .HasColumnType("int unsigned");
 
                     b.HasKey("Id");
@@ -283,8 +284,8 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 1,
                             Descripcion = "GPU de alta gama para diseño y gaming",
                             Estado = "ACTIVA",
-                            FechaFin = new DateTime(2026, 9, 11, 4, 30, 40, 691, DateTimeKind.Utc).AddTicks(1036),
-                            FechaInicio = new DateTime(2026, 9, 11, 3, 45, 40, 691, DateTimeKind.Utc).AddTicks(1031),
+                            FechaFin = new DateTime(2026, 9, 15, 2, 36, 57, 740, DateTimeKind.Utc).AddTicks(9267),
+                            FechaInicio = new DateTime(2026, 9, 15, 1, 51, 57, 740, DateTimeKind.Utc).AddTicks(9262),
                             IncrementoMinimo = 5000.00m,
                             PrecioBase = 30000.00m,
                             Titulo = "Placa de Video RTX",
@@ -298,8 +299,8 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 1,
                             Descripcion = "Ideal para estaciones de trabajo",
                             Estado = "ACTIVA",
-                            FechaFin = new DateTime(2026, 9, 11, 4, 7, 10, 691, DateTimeKind.Utc).AddTicks(1039),
-                            FechaInicio = new DateTime(2026, 9, 11, 3, 7, 40, 691, DateTimeKind.Utc).AddTicks(1039),
+                            FechaFin = new DateTime(2026, 9, 15, 2, 13, 27, 740, DateTimeKind.Utc).AddTicks(9271),
+                            FechaInicio = new DateTime(2026, 9, 15, 1, 13, 57, 740, DateTimeKind.Utc).AddTicks(9271),
                             IncrementoMinimo = 5000.00m,
                             PrecioBase = 50000.00m,
                             Titulo = "Procesador de Alta Gama",
@@ -313,8 +314,8 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 2,
                             Descripcion = "Arte y diseño exclusivo",
                             Estado = "PROGRAMADA",
-                            FechaFin = new DateTime(2026, 9, 13, 4, 5, 40, 691, DateTimeKind.Utc).AddTicks(1045),
-                            FechaInicio = new DateTime(2026, 9, 12, 4, 5, 40, 691, DateTimeKind.Utc).AddTicks(1041),
+                            FechaFin = new DateTime(2026, 9, 17, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9277),
+                            FechaInicio = new DateTime(2026, 9, 16, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9273),
                             IncrementoMinimo = 2000.00m,
                             PrecioBase = 15000.00m,
                             Titulo = "Figura Coleccionable Edición Limitada",
@@ -328,8 +329,8 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 3,
                             Descripcion = "Indumentaria clásica",
                             Estado = "FINALIZADA",
-                            FechaFin = new DateTime(2026, 9, 11, 2, 5, 40, 691, DateTimeKind.Utc).AddTicks(1050),
-                            FechaInicio = new DateTime(2026, 9, 9, 4, 5, 40, 691, DateTimeKind.Utc).AddTicks(1047),
+                            FechaFin = new DateTime(2026, 9, 15, 0, 11, 57, 740, DateTimeKind.Utc).AddTicks(9280),
+                            FechaInicio = new DateTime(2026, 9, 13, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9278),
                             IncrementoMinimo = 2000.00m,
                             PrecioBase = 20000.00m,
                             Titulo = "Campera de Cuero Vintage",
@@ -343,8 +344,8 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 4,
                             Descripcion = "Sin ofertas registradas",
                             Estado = "DESIERTA",
-                            FechaFin = new DateTime(2026, 9, 10, 4, 5, 40, 691, DateTimeKind.Utc).AddTicks(1053),
-                            FechaInicio = new DateTime(2026, 9, 8, 4, 5, 40, 691, DateTimeKind.Utc).AddTicks(1052),
+                            FechaFin = new DateTime(2026, 9, 14, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9282),
+                            FechaInicio = new DateTime(2026, 9, 12, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9282),
                             IncrementoMinimo = 10000.00m,
                             PrecioBase = 80000.00m,
                             Titulo = "Repuesto Clásico de Vehículo",
@@ -389,7 +390,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         {
                             Id = 1,
                             BilleteraId = 2,
-                            Fecha = new DateTime(2026, 9, 10, 4, 5, 40, 691, DateTimeKind.Utc).AddTicks(1166),
+                            Fecha = new DateTime(2026, 9, 14, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9334),
                             Monto = 150000.00m,
                             Tipo = 0
                         },
@@ -397,7 +398,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         {
                             Id = 2,
                             BilleteraId = 2,
-                            Fecha = new DateTime(2026, 9, 11, 4, 0, 40, 691, DateTimeKind.Utc).AddTicks(1168),
+                            Fecha = new DateTime(2026, 9, 15, 2, 6, 57, 740, DateTimeKind.Utc).AddTicks(9336),
                             Monto = 45000.00m,
                             SubastaId = 1,
                             Tipo = 1

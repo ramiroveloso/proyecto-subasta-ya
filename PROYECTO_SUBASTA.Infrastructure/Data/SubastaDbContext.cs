@@ -60,6 +60,10 @@ namespace PROYECTO_SUBASTA.Infrastructure.Data
                 .WithOne(p => p.Subasta)
                 .HasForeignKey(p => p.SubastaId)
                 .OnDelete(DeleteBehavior.Cascade);
+            // Configuración del Token de Concurrencia Optimista
+            modelBuilder.Entity<Subasta>()
+                .Property(s => s.Version)
+                .IsConcurrencyToken();
 
             // ==========================================
             // DATOS SEMILLA (SEED DATA OBLIGATORIOS)

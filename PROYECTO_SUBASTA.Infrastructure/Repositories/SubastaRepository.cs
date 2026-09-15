@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Infrastructure.Data;
@@ -15,9 +15,10 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 
         public async Task<IEnumerable<Subasta>> ObtenerActivasAsync()
         {
-            // Consultamos las subastas activas incluyendo de forma ansiosa (Eager Loading) sus categorías asociadas.
+            // Consultamos las subastas activas incluyendo de forma ansiosa (Eager Loading) sus categorías y pujas asociadas.
             return await _context.Subastas
                 .Include(s => s.Categoria)
+                .Include(s => s.Pujas)
                 .ToListAsync();
         }
 
@@ -44,6 +45,18 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
         public async Task GuardarCambiosAsync()
         {
             await SaveChangesAsync();
+        }
+        public async Task ActualizarConConcurrenciaAsync(Subasta subasta, int versionCliente)
+        {
+            // 1. Establecemos la versión que mandó el cliente como el valor original que EF espera encontrar
+            _context.Entry(subasta).Property(s => s.Version).OriginalValue = (uint)versionCliente;
+
+            // 2. Incrementamos explícitamente el valor actual en memoria
+            subasta.Version = (uint)(versionCliente + 1);
+
+            // 3. Marcamos la entidad como modificada y guardamos
+            _context.Entry(subasta).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
         }
     }
 }

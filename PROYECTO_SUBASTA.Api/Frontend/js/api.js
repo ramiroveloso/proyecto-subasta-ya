@@ -211,6 +211,55 @@ async function fetchCrearSubasta(subastaData) {
     }
 }
 
+async function fetchRegistrarPuja(subastaId, usuarioId, monto, version) {
+    try {
+        const res = await apiFetch(`/Subastas/${subastaId}/pujas`, {
+            method: 'POST',
+            body: JSON.stringify({ usuarioId, monto, version })
+        });
+        const sub = MOCK_SUBASTAS.find(s => s.id == subastaId);
+        if (sub) {
+            const anonHandle = `Postor #${(usuarioId * 33 + 100).toString(16).toUpperCase()}`;
+            if (!sub.pujas) sub.pujas = [];
+            sub.pujas.push({
+                id: Date.now(),
+                subastaId: sub.id,
+                usuarioId: usuarioId,
+                monto: monto,
+                fechaCreacion: new Date().toISOString(),
+                postorAnonimo: anonHandle
+            });
+            sub.version = (sub.version || 1) + 1;
+        }
+        return res;
+    } catch (e) {
+        if (e.status === 400 || e.status === 409 || e.status === 422) throw e;
+
+        // Modo Simulación Local: registrar y asentar en MOCK_SUBASTAS
+        const sub = MOCK_SUBASTAS.find(s => s.id == subastaId);
+        if (sub) {
+            const anonHandle = `Postor #${(usuarioId * 33 + 100).toString(16).toUpperCase()}`;
+            const nuevaPuja = {
+                id: Date.now(),
+                subastaId: sub.id,
+                usuarioId: usuarioId,
+                monto: monto,
+                fechaCreacion: new Date().toISOString(),
+                postorAnonimo: anonHandle
+            };
+            if (!sub.pujas) sub.pujas = [];
+            sub.pujas.push(nuevaPuja);
+            sub.version = (sub.version || 1) + 1;
+            return {
+                mensaje: 'Puja registrada con éxito y saldo retenido en Escrow.',
+                puja: nuevaPuja,
+                version: sub.version
+            };
+        }
+        return { mensaje: 'Ok' };
+    }
+}
+
 async function fetchObtenerCategorias() {
     try {
         return await apiFetch('/Categorias');

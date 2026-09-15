@@ -22,10 +22,33 @@
     --border-light: #e2e8f0;
 }
 
+[data-bs-theme="dark"] {
+    --primary-color: #9d337d;
+    --primary-hover: #b83d93;
+    --primary-light: #c44e9f;
+    --primary-soft: rgba(157, 51, 125, 0.22);
+    --primary-border: rgba(157, 51, 125, 0.45);
+
+    --accent-gold: #e5c158;
+    --accent-gold-hover: #d4af37;
+
+    --bg-main: #0b0f19;
+    --bg-card: #151d2f;
+    --text-dark: #f1f5f9;
+    --text-muted: #94a3b8;
+    --border-light: #243049;
+}
+
 body {
     background-color: var(--bg-main);
     font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
     color: var(--text-dark);
+    transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Transiciones suaves al cambiar de tema */
+.card, .navbar, .content-card, .sidebar-card, .modal-content, .dropdown-menu, .form-control, .form-select, .bg-light {
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 /* --- Utility Classes --- */
@@ -362,6 +385,19 @@ body {
     100% { box-shadow: 0 0 0 0 rgba(46, 213, 115, 0); }
 }
 
+@keyframes flash-bid {
+    0% { background-color: rgba(25, 135, 84, 0.4); transform: scale(1.08); }
+    50% { background-color: rgba(25, 135, 84, 0.2); transform: scale(1.04); }
+    100% { background-color: transparent; transform: scale(1); }
+}
+
+.puja-updated-flash {
+    animation: flash-bid 1.2s ease-out;
+    border-radius: 6px;
+    display: inline-block;
+    padding: 0 4px;
+}
+
 /* --- Modales de Errores y Validaciones (HTTP 400, 409, 422) --- */
 .modal-error-header {
     background: linear-gradient(135deg, #c70039 0%, #900028 100%);
@@ -377,3 +413,224 @@ body {
 .toast-container {
     z-index: 1090;
 }
+
+/* ==========================================================================
+   ESTILOS ESPECÍFICOS PARA MODO OSCURO (DATA-BS-THEME="DARK")
+   ========================================================================== */
+
+[data-bs-theme="dark"] .navbar-custom {
+    background: linear-gradient(135deg, #320c27 0%, #170412 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-bs-theme="dark"] .sidebar-card,
+[data-bs-theme="dark"] .content-card,
+[data-bs-theme="dark"] .card {
+    background-color: var(--bg-card);
+    border-color: var(--border-light);
+    color: var(--text-dark);
+}
+
+[data-bs-theme="dark"] .auction-card {
+    background: var(--bg-card);
+    border-color: var(--border-light);
+}
+
+[data-bs-theme="dark"] .auction-card .card-img-wrapper {
+    background-color: #192231;
+}
+
+[data-bs-theme="dark"] .auction-card:hover {
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45) !important;
+}
+
+[data-bs-theme="dark"] .nav-pills .nav-link {
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .nav-pills .nav-link:hover {
+    background-color: var(--primary-soft);
+    color: #f1f5f9;
+}
+
+[data-bs-theme="dark"] .nav-pills .nav-link.active {
+    background-color: var(--primary-color);
+    color: #ffffff;
+    border-left-color: var(--accent-gold);
+    box-shadow: 0 4px 12px rgba(157, 51, 125, 0.3);
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: #192231 !important;
+    border-color: #273449 !important;
+    color: var(--text-dark);
+}
+
+[data-bs-theme="dark"] .bg-white {
+    background-color: var(--bg-card) !important;
+    color: var(--text-dark);
+}
+
+[data-bs-theme="dark"] .text-dark {
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] .text-secondary {
+    color: #94a3b8 !important;
+}
+
+[data-bs-theme="dark"] .border {
+    border-color: var(--border-light) !important;
+}
+
+[data-bs-theme="dark"] .border-top,
+[data-bs-theme="dark"] .border-bottom,
+[data-bs-theme="dark"] .border-start,
+[data-bs-theme="dark"] .border-end {
+    border-color: var(--border-light) !important;
+}
+
+[data-bs-theme="dark"] .dropdown-menu {
+    background-color: #151d2f;
+    border-color: #2a3850;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-bs-theme="dark"] .dropdown-item {
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .dropdown-item:hover,
+[data-bs-theme="dark"] .dropdown-item:focus {
+    background-color: #232f46;
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .dropdown-item.active {
+    background-color: var(--primary-color);
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .dropdown-divider {
+    border-color: #252e3e;
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: #0d131f;
+    border-color: #273449;
+    color: #f1f5f9;
+}
+
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+    background-color: #0d131f;
+    border-color: var(--primary-color);
+    color: #ffffff;
+    box-shadow: 0 0 0 0.25rem rgba(157, 51, 125, 0.25);
+}
+
+[data-bs-theme="dark"] .input-group-text {
+    background-color: #192231;
+    border-color: #273449;
+    color: #94a3b8;
+}
+
+[data-bs-theme="dark"] .modal-content {
+    background-color: #151d2f;
+    border-color: #273449;
+    color: #f1f5f9;
+}
+
+[data-bs-theme="dark"] .modal-header,
+[data-bs-theme="dark"] .modal-footer {
+    border-color: #273449;
+}
+
+[data-bs-theme="dark"] .modal-footer.bg-light {
+    background-color: #0f1523 !important;
+}
+
+[data-bs-theme="dark"] .toast {
+    background-color: #151d2f;
+    border-color: #273449;
+}
+
+[data-bs-theme="dark"] .toast-body {
+    background-color: #151d2f !important;
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] .bid-item {
+    background-color: #192231;
+    color: #f1f5f9;
+}
+
+[data-bs-theme="dark"] .bid-item.highest {
+    background-color: #2b2413;
+}
+
+[data-bs-theme="dark"] .badge-postor-anon {
+    background-color: #252e3e;
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .table {
+    --bs-table-color: #f1f5f9;
+    --bs-table-bg: transparent;
+    --bs-table-border-color: #252e3e;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary {
+    color: #94a3b8;
+    border-color: #475569;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+    background-color: #334155;
+    color: #f8fafc;
+}
+
+/* Badges de saldo y retención en dropdown */
+.badge-saldo {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+}
+
+.retencion-info {
+    font-size: 0.72rem;
+    font-family: monospace;
+    margin-top: 2px;
+}
+
+/* Tarjetas de Actividades y Catálogo */
+.activity-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.activity-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+[data-bs-theme="dark"] .activity-card {
+    background-color: #151d2f !important;
+    border-color: #243049 !important;
+}
+
+[data-bs-theme="dark"] .activity-card .bg-light {
+    background-color: #192231 !important;
+    border-color: #273449 !important;
+}
+
+[data-bs-theme="dark"] .activity-card .text-dark {
+    color: #f1f5f9 !important;
+}
+
+[data-bs-theme="dark"] .activity-card .border {
+    border-color: #273449 !important;
+}
+
+

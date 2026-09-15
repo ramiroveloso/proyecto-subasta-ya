@@ -4,6 +4,7 @@ using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Application.Repositories;
 using System;
 using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Application.DTOs;
 
 namespace PROYECTO_SUBASTA.Api.Controllers
 {
@@ -68,6 +69,35 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             {
                 // Capturamos violaciones a las reglas de negocio del dominio y respondemos con un estado 400 Bad Request explicativo.
                 return BadRequest(ex.Message);
+            }
+        }
+        [HttpPost("{id}/pujas")]
+        public async Task<IActionResult> RegistrarPuja(int id, [FromBody] RegistrarPujaDto dto)
+        {
+            if (dto == null)
+            {
+                return BadRequest("Los datos de la puja son inválidos.");
+            }
+
+            try
+            {
+                // Delegamos la lógica de negocio y validación de versión al caso de uso
+                await _subastaUseCases.RegistrarPujaAsync(id, dto.UsuarioId, dto.Monto, dto.Version);
+
+                return Ok(new { mensaje = "Puja registrada con éxito y saldo retenido en Escrow." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return UnprocessableEntity(ex.Message);
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+            {
+                // Este bloque intercepta el conflicto de versión y retorna el HTTP 409 obligatorio para la cátedra
+                return Conflict(new { mensaje = "Conflicto de concurrencia (409): La subasta fue modificada por otro usuario en simultáneo. Intente nuevamente." });
             }
         }
     }
