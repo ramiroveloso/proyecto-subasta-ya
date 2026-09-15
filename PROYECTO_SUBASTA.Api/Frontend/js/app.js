@@ -196,6 +196,7 @@ async function cambiarPerfilSemilla(usuarioId) {
 
     await renderizarSelectorPerfilesSemilla();
     await actualizarBilleteraUI();
+    actualizarTarjetasCatalogo();
     await cargarMisActividades();
 
     if (subastaSeleccionadaSala) {
@@ -301,46 +302,78 @@ async function aplicarFiltros() {
         }
 
         subastasFiltradas.forEach(sub => {
-            const categoria = categoriasCache.find(c => c.id == sub.categoriaId)?.nombre || 'General';
+            const subId = sub.id ?? sub.Id;
+            const subTitulo = sub.titulo ?? sub.Titulo ?? `Subasta #${subId}`;
+            const subCatId = sub.categoriaId ?? sub.CategoriaId;
+            const categoria = categoriasCache.find(c => c.id == subCatId)?.nombre || 'General';
             const pujaActual = obtenerPujaMaxima(sub);
-            const badgeClass = getEstadoBadgeClass(sub.estado);
-            const imagenUrl = sub.urlImagen || 'assets/images/watch.png';
+            const subEstado = sub.estado ?? sub.Estado ?? 'ACTIVA';
+            const badgeClass = getEstadoBadgeClass(subEstado);
+            const imagenUrl = sub.urlImagen ?? sub.UrlImagen ?? 'assets/images/watch.png';
+            const pujas = sub.pujas ?? sub.Pujas ?? [];
+            const totalOfertas = pujas.length;
+            const ahora = Date.now();
+            const fechaFinStr = sub.fechaFin ?? sub.FechaFin;
+            const fechaFinMs = new Date(fechaFinStr).getTime();
+            const haFinalizado = (subEstado === 'FINALIZADA') || (fechaFinMs <= ahora);
+            const subPrecioBase = sub.precioBase ?? sub.PrecioBase ?? 0;
+
+            // Determinar estado de liderazgo del usuario activo en esta subasta
+            const misPujasEnSub = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
+            let userBadgeHtml = '';
+            if (misPujasEnSub.length > 0) {
+                const miMax = Math.max(...misPujasEnSub.map(p => (p.monto ?? p.Monto)));
+                const esLider = (miMax === pujaActual);
+                if (haFinalizado) {
+                    userBadgeHtml = esLider ? 
+                        `<span class="badge bg-success shadow-sm extra-small"><i class="fa-solid fa-crown me-1"></i>¡Ganaste!</span>` : 
+                        `<span class="badge bg-secondary shadow-sm extra-small">Finalizada</span>`;
+                } else {
+                    userBadgeHtml = esLider ? 
+                        `<span class="badge bg-success-subtle text-success border border-success-subtle extra-small"><i class="fa-solid fa-crown me-1"></i>Vas ganando</span>` : 
+                        `<span class="badge bg-danger-subtle text-danger border border-danger-subtle extra-small"><i class="fa-solid fa-triangle-exclamation me-1"></i>Te superaron</span>`;
+                }
+            }
 
             const cardCol = document.createElement('div');
             cardCol.className = 'col';
+            cardCol.setAttribute('data-subasta-card-id', subId);
             cardCol.innerHTML = `
                 <div class="card auction-card h-100 shadow-sm">
                     <div class="card-img-wrapper">
-                        <img src="${imagenUrl}" class="card-img-top" alt="${sub.titulo}" onerror="this.src='assets/images/watch.png'">
+                        <img src="${imagenUrl}" class="card-img-top" alt="${subTitulo}" onerror="this.src='assets/images/watch.png'">
                         <span class="badge-categoria"><i class="fa-solid fa-tag me-1"></i>${categoria}</span>
-                        <span class="badge badge-status ${badgeClass}">${sub.estado}</span>
+                        <span class="badge badge-status ${haFinalizado ? 'bg-secondary' : badgeClass}">${haFinalizado ? 'FINALIZADA' : subEstado}</span>
                     </div>
                     <div class="card-body d-flex flex-column p-3">
-                        <h5 class="card-title text-dark fs-6 fw-bold mb-1 text-truncate">${sub.titulo}</h5>
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <h5 class="card-title text-dark fs-6 fw-bold mb-0 text-truncate flex-grow-1" title="${subTitulo}">${subTitulo}</h5>
+                            <span class="card-user-leadership ms-2 flex-shrink-0">${userBadgeHtml}</span>
+                        </div>
                         <p class="card-text text-muted small flex-grow-1 text-truncate-2" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px;">
-                            ${sub.descripcion || 'Sin descripción disponible.'}
+                            ${sub.descripcion ?? sub.Descripcion ?? 'Sin descripción disponible.'}
                         </p>
                         
                         <div class="bg-light p-2 rounded-3 my-2 border">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <span class="text-muted small">Puja Mayor Actual:</span>
-                                <span class="fw-bold text-success fs-6">$${pujaActual.toLocaleString()}</span>
+                                <span id="card-puja-${subId}" class="fw-bold text-success fs-6 card-puja-monto">$${pujaActual.toLocaleString('es-AR')}</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center extra-small text-muted">
-                                <span>Base: $${sub.precioBase.toLocaleString()}</span>
-                                <span>Incremento: +$${sub.incrementoMinimo.toLocaleString()}</span>
+                                <span>Base: $${subPrecioBase.toLocaleString('es-AR')}</span>
+                                <span class="card-pujas-count">${totalOfertas} oferta${totalOfertas === 1 ? '' : 's'}</span>
                             </div>
                         </div>
 
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <span class="text-muted small"><i class="fa-regular fa-clock me-1"></i>Cierre:</span>
-                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold card-timer" data-fecha-fin="${sub.fechaFin}">
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold card-timer" data-fecha-fin="${fechaFinStr}" data-subasta-id="${subId}">
                                 Cargando...
                             </span>
                         </div>
 
-                        <button class="btn btn-primary-custom btn-sm w-100 mt-auto" onclick="abrirSalaEnVivo(${sub.id})">
-                            <i class="fa-solid fa-gavel me-1"></i> Entrar a Sala en Vivo
+                        <button class="btn btn-primary-custom btn-sm w-100 mt-auto" onclick="abrirSalaEnVivo(${subId})">
+                            <i class="fa-solid fa-gavel me-1"></i> ${haFinalizado ? 'Ver Sala / Resultados' : 'Entrar a Sala en Vivo'}
                         </button>
                     </div>
                 </div>
@@ -362,8 +395,10 @@ async function aplicarFiltros() {
 }
 
 function obtenerPujaMaxima(subasta) {
-    if (!subasta.pujas || subasta.pujas.length === 0) return subasta.precioBase;
-    return Math.max(...subasta.pujas.map(p => p.monto));
+    if (!subasta) return 0;
+    const pujas = subasta.pujas || subasta.Pujas || [];
+    if (pujas.length === 0) return (subasta.precioBase ?? subasta.PrecioBase ?? 0);
+    return Math.max(...pujas.map(p => (p.monto ?? p.Monto ?? 0)));
 }
 
 function getEstadoBadgeClass(estado) {
@@ -376,17 +411,103 @@ function getEstadoBadgeClass(estado) {
     }
 }
 
+/**
+ * Actualiza en tiempo real los datos (monto, ofertas, badge de liderazgo y estado)
+ * de las miniaturas en el explorador de catálogo sin recargar toda la vista.
+ */
+function actualizarTarjetasCatalogo() {
+    subastasCache.forEach(sub => {
+        actualizarTarjetaCatalogo(sub.id ?? sub.Id);
+    });
+}
+
+function actualizarTarjetaCatalogo(subastaId, nuevoMontoAnimar = null) {
+    const cardCol = document.querySelector(`[data-subasta-card-id="${subastaId}"]`);
+    const sub = subastasCache.find(s => (s.id ?? s.Id) == subastaId);
+    if (!sub || !cardCol) return;
+
+    const pujaActual = obtenerPujaMaxima(sub);
+    const ahora = Date.now();
+    const fechaFinMs = new Date(sub.fechaFin ?? sub.FechaFin).getTime();
+    const subEstado = sub.estado ?? sub.Estado ?? 'ACTIVA';
+    const haFinalizado = (subEstado === 'FINALIZADA') || (fechaFinMs <= ahora);
+
+    // 1. Actualizar monto con animación de destello
+    const montoElem = cardCol.querySelector('.card-puja-monto');
+    if (montoElem) {
+        montoElem.textContent = `$${pujaActual.toLocaleString('es-AR')}`;
+        if (nuevoMontoAnimar !== null) {
+            montoElem.classList.remove('puja-updated-flash');
+            void montoElem.offsetWidth; // Force DOM reflow
+            montoElem.classList.add('puja-updated-flash');
+        }
+    }
+
+    // 2. Actualizar contador de ofertas
+    const countElem = cardCol.querySelector('.card-pujas-count');
+    if (countElem) {
+        const totalPujas = (sub.pujas || sub.Pujas || []).length;
+        countElem.textContent = `${totalPujas} oferta${totalPujas === 1 ? '' : 's'}`;
+    }
+
+    // 3. Actualizar badge de estado (ACTIVA / FINALIZADA)
+    const badgeStatus = cardCol.querySelector('.badge-status');
+    if (badgeStatus) {
+        if (haFinalizado) {
+            badgeStatus.className = 'badge badge-status bg-secondary';
+            badgeStatus.textContent = 'FINALIZADA';
+        } else {
+            badgeStatus.className = `badge badge-status ${getEstadoBadgeClass(subEstado)}`;
+            badgeStatus.textContent = subEstado;
+        }
+    }
+
+    // 4. Actualizar badge de liderazgo del usuario activo
+    const leaderBadge = cardCol.querySelector('.card-user-leadership');
+    if (leaderBadge) {
+        const pujas = sub.pujas || sub.Pujas || [];
+        const misPujas = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
+        if (misPujas.length > 0) {
+            const miMax = Math.max(...misPujas.map(p => (p.monto ?? p.Monto)));
+            const esLider = (miMax === pujaActual);
+            if (haFinalizado) {
+                leaderBadge.innerHTML = esLider ? 
+                    `<span class="badge bg-success shadow-sm extra-small"><i class="fa-solid fa-crown me-1"></i>¡Ganaste!</span>` : 
+                    `<span class="badge bg-secondary shadow-sm extra-small">Finalizada</span>`;
+            } else {
+                leaderBadge.innerHTML = esLider ? 
+                    `<span class="badge bg-success-subtle text-success border border-success-subtle extra-small"><i class="fa-solid fa-crown me-1"></i>Vas ganando</span>` : 
+                    `<span class="badge bg-danger-subtle text-danger border border-danger-subtle extra-small"><i class="fa-solid fa-triangle-exclamation me-1"></i>Te superaron</span>`;
+            }
+        } else {
+            leaderBadge.innerHTML = '';
+        }
+    }
+}
+
 function actualizarTemporizadoresCatalogo() {
     const timers = document.querySelectorAll('.card-timer');
     const ahora = new Date().getTime();
 
     timers.forEach(t => {
         const fechaFin = new Date(t.getAttribute('data-fecha-fin')).getTime();
+        const subId = parseInt(t.getAttribute('data-subasta-id'));
         const diff = fechaFin - ahora;
 
         if (diff <= 0) {
             t.innerHTML = 'FINALIZADA';
             t.className = 'badge bg-secondary text-white border fw-semibold card-timer';
+
+            if (subId) {
+                const cardCol = document.querySelector(`[data-subasta-card-id="${subId}"]`);
+                if (cardCol) {
+                    const badgeStatus = cardCol.querySelector('.badge-status');
+                    if (badgeStatus && badgeStatus.textContent !== 'FINALIZADA') {
+                        badgeStatus.className = 'badge badge-status bg-secondary';
+                        badgeStatus.textContent = 'FINALIZADA';
+                    }
+                }
+            }
         } else {
             const horas = Math.floor(diff / (1000 * 60 * 60));
             const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -397,10 +518,11 @@ function actualizarTemporizadoresCatalogo() {
         }
     });
 
-    // Sincronización periódica de saldos de los usuarios cada 4 segundos
+    // Sincronización periódica de saldos de usuarios y tarjetas cada 4 segundos
     contadorSyncInterval++;
     if (contadorSyncInterval % 4 === 0) {
         sincronizarSaldosDropdown();
+        actualizarTarjetasCatalogo();
     }
 }
 
@@ -633,14 +755,15 @@ function actualizarMonitorPujasSala() {
     if (!subastaSeleccionadaSala) return;
 
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
-    document.getElementById('sala-puja-actual').textContent = `$${pujaActual.toLocaleString()}`;
+    document.getElementById('sala-puja-actual').textContent = `$${pujaActual.toLocaleString('es-AR')}`;
 
     const bannerLiderazgo = document.getElementById('sala-banner-liderazgo');
-    const pujas = subastaSeleccionadaSala.pujas || [];
+    const pujas = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
 
     if (pujas.length > 0) {
-        const ultimaPuja = pujas[pujas.length - 1];
-        const esMiPuja = ultimaPuja.usuarioId === usuarioActual.id;
+        const pujasSorted = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
+        const mayorPuja = pujasSorted[0];
+        const esMiPuja = (mayorPuja.usuarioId ?? mayorPuja.UsuarioId) === usuarioActual.id;
 
         if (esMiPuja) {
             bannerLiderazgo.className = 'status-banner-leading p-3 mb-3 d-flex align-items-center';
@@ -648,18 +771,18 @@ function actualizarMonitorPujasSala() {
                 <i class="fa-solid fa-trophy fs-3 me-3 text-warning"></i>
                 <div>
                     <h6 class="fw-bold mb-0">¡ESTÁS LIDERANDO LA PUJA! (${usuarioActual.nombre})</h6>
-                    <small>Tu oferta de $${ultimaPuja.monto.toLocaleString()} es la mayor actual y se encuentra retenida en garantía Escrow.</small>
+                    <small>Tu oferta de $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')} es la mayor actual y se encuentra retenida en garantía Escrow.</small>
                 </div>
             `;
         } else {
-            const usuarioParticipo = pujas.some(p => p.usuarioId === usuarioActual.id);
+            const usuarioParticipo = pujas.some(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
             if (usuarioParticipo) {
                 bannerLiderazgo.className = 'status-banner-outbid p-3 mb-3 d-flex align-items-center';
                 bannerLiderazgo.innerHTML = `
                     <i class="fa-solid fa-triangle-exclamation fs-3 me-3 text-danger"></i>
                     <div>
                         <h6 class="fw-bold mb-0">¡HAS SIDO SUPERADO! (OUTBID)</h6>
-                        <small>Otro postor ha realizado una oferta de $${ultimaPuja.monto.toLocaleString()}. Incrementa tu oferta para recuperar la delantera.</small>
+                        <small>Otro postor ha realizado una oferta de $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')}. Incrementa tu oferta para recuperar la delantera.</small>
                     </div>
                 `;
             } else {
@@ -667,19 +790,20 @@ function actualizarMonitorPujasSala() {
                 bannerLiderazgo.innerHTML = `
                     <i class="fa-solid fa-info-circle fs-3 me-3"></i>
                     <div>
-                        <h6 class="fw-bold mb-0">Puja Líder Actual: $${ultimaPuja.monto.toLocaleString()}</h6>
-                        <small>Realizada por un postor anónimo. Inicia tu puja para ingresar al remate.</small>
+                        <h6 class="fw-bold mb-0">Puja Líder Actual: $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')}</h6>
+                        <small>Inicia tu puja para ingresar al remate en vivo.</small>
                     </div>
                 `;
             }
         }
     } else {
+        const precioBase = subastaSeleccionadaSala.precioBase ?? subastaSeleccionadaSala.PrecioBase ?? 0;
         bannerLiderazgo.className = 'alert alert-light border p-3 mb-3 d-flex align-items-center';
         bannerLiderazgo.innerHTML = `
             <i class="fa-solid fa-gavel fs-3 me-3 text-secondary"></i>
             <div>
                 <h6 class="fw-bold mb-0">Sin ofertas registradas</h6>
-                <small>Sé el primer postor realizando una oferta desde el precio base de $${subastaSeleccionadaSala.precioBase.toLocaleString()}.</small>
+                <small>Sé el primer postor realizando una oferta desde el precio base de $${precioBase.toLocaleString('es-AR')}.</small>
             </div>
         `;
     }
@@ -693,13 +817,15 @@ function actualizarMonitorPujasSala() {
     }
 
     listaHistorial.innerHTML = '';
-    const pujasOrdenadas = [...pujas].reverse();
+    const pujasOrdenadas = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
 
     pujasOrdenadas.forEach((p, index) => {
         const esLider = index === 0;
-        const esPropia = p.usuarioId === usuarioActual.id;
-        const fechaFormat = new Date(p.fechaCreacion).toLocaleTimeString();
-        const anonHandle = p.postorAnonimo || `Postor #${(p.usuarioId * 33 + 100).toString(16).toUpperCase()}`;
+        const esPropia = (p.usuarioId ?? p.UsuarioId) === usuarioActual.id;
+        const pMonto = p.monto ?? p.Monto ?? 0;
+        const fechaFormat = new Date(p.fechaCreacion ?? p.FechaCreacion).toLocaleTimeString();
+        const pUid = p.usuarioId ?? p.UsuarioId;
+        const anonHandle = p.postorAnonimo || `Postor #${(pUid * 33 + 100).toString(16).toUpperCase()}`;
 
         const item = document.createElement('div');
         item.className = `bid-item p-2 mb-2 ${esLider ? 'highest' : ''}`;
@@ -713,8 +839,8 @@ function actualizarMonitorPujasSala() {
                     <div class="text-muted extra-small mt-1">${fechaFormat}</div>
                 </div>
                 <div class="text-end">
-                    <span class="fw-bold fs-6 ${esLider ? 'text-success' : 'text-dark'}">$${p.monto.toLocaleString()}</span>
-                    <div class="extra-small text-muted">Escrow Ok</div>
+                    <span class="fw-bold fs-6 ${esLider ? 'text-success' : 'text-dark'}">$${pMonto.toLocaleString('es-AR')}</span>
+                    <div class="extra-small text-muted">${esLider ? 'Garantía Escrow Retenida' : 'Garantía Liberada'}</div>
                 </div>
             </div>
         `;
@@ -729,48 +855,56 @@ async function enviarPuja(event) {
 
     const montoInput = parseFloat(document.getElementById('input-monto-puja').value);
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
-    const incrementoMin = subastaSeleccionadaSala.incrementoMinimo;
+    const incrementoMin = subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000;
 
     if (isNaN(montoInput) || montoInput <= pujaActual) {
-        mostrarToast(`La puja debe superar la oferta actual de $${pujaActual.toLocaleString()}.`, 'Oferta Inválida', 'warning');
+        mostrarToast(`La puja debe superar la oferta actual de $${pujaActual.toLocaleString('es-AR')}.`, 'Oferta Inválida', 'warning');
         return;
     }
 
-    if ((montoInput - pujaActual) < incrementoMin && subastaSeleccionadaSala.pujas.length > 0) {
-        mostrarToast(`El incremento mínimo requerido es de $${incrementoMin.toLocaleString()}.`, 'Incremento Insuficiente', 'warning');
+    const pujasPrevias = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
+    if ((montoInput - pujaActual) < incrementoMin && pujasPrevias.length > 0) {
+        mostrarToast(`El incremento mínimo requerido es de $${incrementoMin.toLocaleString('es-AR')}.`, 'Incremento Insuficiente', 'warning');
         return;
     }
 
     try {
-        const pujasPrevias = subastaSeleccionadaSala.pujas || [];
         let pujaPreviaLiberar = null;
         if (pujasPrevias.length > 0) {
-            pujaPreviaLiberar = pujasPrevias[pujasPrevias.length - 1];
+            const sortedPrevias = [...pujasPrevias].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
+            pujaPreviaLiberar = sortedPrevias[0];
         }
 
-        if (pujaPreviaLiberar && pujaPreviaLiberar.usuarioId === usuarioActual.id) {
+        const prevUsuarioId = pujaPreviaLiberar ? (pujaPreviaLiberar.usuarioId ?? pujaPreviaLiberar.UsuarioId) : null;
+        const prevMonto = pujaPreviaLiberar ? (pujaPreviaLiberar.monto ?? pujaPreviaLiberar.Monto) : 0;
+
+        if (pujaPreviaLiberar && prevUsuarioId === usuarioActual.id) {
             // Mismo usuario incrementa su oferta: liberar la retención anterior para contar con los fondos
-            await fetchLiberarSaldo(usuarioActual.id, pujaPreviaLiberar.monto, subastaSeleccionadaSala.id);
+            await fetchLiberarSaldo(usuarioActual.id, prevMonto, subastaSeleccionadaSala.id);
         }
 
         await fetchRetenerSaldo(usuarioActual.id, montoInput, subastaSeleccionadaSala.id);
 
-        if (pujaPreviaLiberar && pujaPreviaLiberar.usuarioId !== usuarioActual.id) {
+        if (pujaPreviaLiberar && prevUsuarioId !== usuarioActual.id) {
             // Se superó la oferta del postor anterior (Outbid): liberar su garantía Escrow
-            await fetchLiberarSaldo(pujaPreviaLiberar.usuarioId, pujaPreviaLiberar.monto, subastaSeleccionadaSala.id);
+            await fetchLiberarSaldo(prevUsuarioId, prevMonto, subastaSeleccionadaSala.id);
         }
+
+        // Llamada formal a la API REST (o simulación local) para asentar la puja y validar concurrencia optimista
+        const versionActual = subastaSeleccionadaSala.version || subastaSeleccionadaSala.Version || 1;
+        const resPuja = await fetchRegistrarPuja(subastaSeleccionadaSala.id, usuarioActual.id, montoInput, versionActual);
 
         const ahora = new Date().getTime();
         const fechaFinMs = new Date(subastaSeleccionadaSala.fechaFin).getTime();
         let antiSnipingActivado = false;
 
-        if ((fechaFinMs - ahora) <= 60000) {
+        if ((fechaFinMs - ahora) <= 60000 && (fechaFinMs - ahora) > 0) {
             subastaSeleccionadaSala.fechaFin = new Date(fechaFinMs + 60000).toISOString();
             antiSnipingActivado = true;
         }
 
         const anonHandle = `Postor #${(usuarioActual.id * 33 + 100).toString(16).toUpperCase()}`;
-        const nuevaPuja = {
+        const nuevaPuja = (resPuja && resPuja.puja) ? resPuja.puja : {
             id: Date.now(),
             subastaId: subastaSeleccionadaSala.id,
             usuarioId: usuarioActual.id,
@@ -779,23 +913,43 @@ async function enviarPuja(event) {
             postorAnonimo: anonHandle
         };
 
-        subastaSeleccionadaSala.pujas.push(nuevaPuja);
-        subastaSeleccionadaSala.version += 1;
+        if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
+        if (!subastaSeleccionadaSala.pujas.some(p => p.id === nuevaPuja.id)) {
+            subastaSeleccionadaSala.pujas.push(nuevaPuja);
+        }
+
+        if (resPuja && resPuja.version) {
+            subastaSeleccionadaSala.version = resPuja.version;
+        } else {
+            subastaSeleccionadaSala.version = (subastaSeleccionadaSala.version || 1) + 1;
+        }
 
         const indexSub = subastasCache.findIndex(s => s.id === subastaSeleccionadaSala.id);
         if (indexSub !== -1) {
-            subastasCache[indexSub].pujas.push(nuevaPuja);
+            if (!subastasCache[indexSub].pujas) subastasCache[indexSub].pujas = [];
+            if (!subastasCache[indexSub].pujas.some(p => p.id === nuevaPuja.id)) {
+                subastasCache[indexSub].pujas.push(nuevaPuja);
+            }
             subastasCache[indexSub].fechaFin = subastaSeleccionadaSala.fechaFin;
+            subastasCache[indexSub].version = subastaSeleccionadaSala.version;
+        }
+
+        if (typeof MOCK_SUBASTAS !== 'undefined' && antiSnipingActivado) {
+            const mockItem = MOCK_SUBASTAS.find(s => s.id === subastaSeleccionadaSala.id);
+            if (mockItem) mockItem.fechaFin = subastaSeleccionadaSala.fechaFin;
         }
 
         if (antiSnipingActivado) {
             mostrarToast(`⚡ <strong>¡REGLA ANTI-SNIPING ACTIVADA!</strong> Se han añadido +60 segundos al temporizador por oferta de último minuto.`, 'Anti-Sniping Activado', 'warning');
         } else {
-            mostrarToast(`¡Oferta enviada por $${montoInput.toLocaleString()}! Retenido en Escrow.`, 'Oferta Exitosa', 'success');
+            mostrarToast(`¡Oferta enviada por $${montoInput.toLocaleString('es-AR')}! Retenido en Escrow.`, 'Oferta Exitosa', 'success');
         }
 
         actualizarMonitorPujasSala();
         configurarBotonesPujaRapida(incrementoMin);
+        actualizarTarjetaCatalogo(subastaSeleccionadaSala.id, montoInput);
+        actualizarTarjetasCatalogo();
+        actualizarSelectorSalaDirecto();
         await actualizarBilleteraUI();
         await sincronizarSaldosDropdown();
         await cargarMisActividades();
@@ -981,6 +1135,14 @@ async function cargarMisActividades() {
 
     if (!contenedorPujas || !contenedorPublicaciones) return;
 
+    if (!subastasCache || subastasCache.length === 0) {
+        try {
+            subastasCache = await fetchObtenerSubastas();
+        } catch (e) {
+            console.warn("No se pudieron cargar subastas para Mis Actividades", e);
+        }
+    }
+
     let misPujasCount = 0;
     let misPublicacionesCount = 0;
     let misGanadasCount = 0;
@@ -989,51 +1151,132 @@ async function cargarMisActividades() {
     contenedorPublicaciones.innerHTML = '';
 
     subastasCache.forEach(sub => {
-        const misPujasEnSub = (sub.pujas || []).filter(p => p.usuarioId === usuarioActual.id);
+        const subId = sub.id ?? sub.Id;
+        const subTitulo = sub.titulo ?? sub.Titulo ?? `Subasta #${subId}`;
+        const subImg = sub.urlImagen ?? sub.UrlImagen ?? 'assets/images/watch.png';
+        const subPrecioBase = sub.precioBase ?? sub.PrecioBase ?? 0;
+        const subEstado = sub.estado ?? sub.Estado ?? 'ACTIVA';
+        const subVendedorId = sub.vendedorId ?? sub.VendedorId;
+        const pujas = sub.pujas ?? sub.Pujas ?? [];
+        const catId = sub.categoriaId ?? sub.CategoriaId;
+        const catNombre = categoriasCache.find(c => c.id == catId)?.nombre || 'General';
+
+        const ahora = Date.now();
+        const fechaFinMs = new Date(sub.fechaFin ?? sub.FechaFin).getTime();
+        const haFinalizado = (subEstado === 'FINALIZADA') || (fechaFinMs <= ahora);
+        const pujaAbsolutaMax = obtenerPujaMaxima(sub);
+
+        // 1. Subastas en las que el usuario actual ha realizado ofertas
+        const misPujasEnSub = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
         if (misPujasEnSub.length > 0) {
             misPujasCount += misPujasEnSub.length;
-            const miMayorPuja = Math.max(...misPujasEnSub.map(p => p.monto));
-            const pujaAbsolutaMax = obtenerPujaMaxima(sub);
-            const esLider = miMayorPuja === pujaAbsolutaMax;
+            const miMayorPuja = Math.max(...misPujasEnSub.map(p => (p.monto ?? p.Monto)));
+            const esLider = (miMayorPuja === pujaAbsolutaMax);
 
-            if (sub.estado === 'FINALIZADA' && esLider) misGanadasCount++;
+            if (haFinalizado && esLider) {
+                misGanadasCount++;
+            }
+
+            let badgeLiderazgoHtml = '';
+            let escrowInfoHtml = '';
+            let cardBorderClass = 'border';
+
+            if (haFinalizado) {
+                if (esLider) {
+                    cardBorderClass = 'border-success border-2';
+                    badgeLiderazgoHtml = `<span class="badge bg-success shadow-sm"><i class="fa-solid fa-crown me-1"></i>¡Subasta Ganada!</span>`;
+                    escrowInfoHtml = `<span class="text-success extra-small fw-bold"><i class="fa-solid fa-circle-check me-1"></i>Adjudicada por $${miMayorPuja.toLocaleString('es-AR')}</span>`;
+                } else {
+                    badgeLiderazgoHtml = `<span class="badge bg-secondary"><i class="fa-solid fa-flag-checkered me-1"></i>Finalizada</span>`;
+                    escrowInfoHtml = `<span class="text-muted extra-small"><i class="fa-solid fa-rotate-left text-secondary me-1"></i>Superada · Garantía liberada</span>`;
+                }
+            } else {
+                if (esLider) {
+                    cardBorderClass = 'border-success';
+                    badgeLiderazgoHtml = `<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-trophy me-1"></i>Vas ganando (Líder)</span>`;
+                    escrowInfoHtml = `<span class="text-warning-emphasis extra-small fw-semibold"><i class="fa-solid fa-shield-halved me-1 text-warning"></i>$${miMayorPuja.toLocaleString('es-AR')} retenidos en Escrow</span>`;
+                } else {
+                    cardBorderClass = 'border-danger-subtle';
+                    badgeLiderazgoHtml = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>Te superaron (Outbid)</span>`;
+                    escrowInfoHtml = `<span class="text-info extra-small fw-semibold"><i class="fa-solid fa-arrow-rotate-left me-1"></i>Garantía liberada ($${miMayorPuja.toLocaleString('es-AR')} disponibles)</span>`;
+                }
+            }
 
             const col = document.createElement('div');
-            col.className = 'col-md-6 mb-3';
+            col.className = 'col-lg-6 col-12 mb-3';
             col.innerHTML = `
-                <div class="card h-100 border p-3 shadow-sm">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="fw-bold text-dark mb-0">${sub.titulo}</h6>
-                        ${esLider ? 
-                            '<span class="badge bg-success"><i class="fa-solid fa-trophy me-1"></i> Vas ganando</span>' : 
-                            '<span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i> Te superaron</span>'}
-                    </div>
-                    <p class="text-muted extra-small mb-2">Mi Oferta: <strong>$${miMayorPuja.toLocaleString()}</strong> | Puja Mayor: <strong>$${pujaAbsolutaMax.toLocaleString()}</strong></p>
-                    <div class="d-flex justify-content-between align-items-center border-top pt-2">
-                        <span class="badge bg-light text-dark">Estado: ${sub.estado}</span>
-                        <button class="btn btn-outline-primary-custom btn-sm" onclick="abrirSalaEnVivo(${sub.id})">
-                            <i class="fa-solid fa-arrow-right me-1"></i> Ver Sala
-                        </button>
+                <div class="card h-100 ${cardBorderClass} p-3 shadow-sm activity-card">
+                    <div class="d-flex gap-3">
+                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
+                                <div class="flex-shrink-0">${badgeLiderazgoHtml}</div>
+                            </div>
+                            <div class="extra-small text-muted mb-2">
+                                <span class="badge bg-light text-dark border me-1">${catNombre}</span>
+                                <span>${misPujasEnSub.length} oferta${misPujasEnSub.length === 1 ? '' : 's'} tuya${misPujasEnSub.length === 1 ? '' : 's'} (${pujas.length} en total)</span>
+                            </div>
+                            <div class="bg-light p-2 rounded-2 border extra-small mb-2">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Tu mejor oferta:</span>
+                                    <span class="fw-bold text-primary-custom">$${miMayorPuja.toLocaleString('es-AR')}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Oferta líder actual:</span>
+                                    <span class="fw-bold ${esLider ? 'text-success' : 'text-danger'}">$${pujaAbsolutaMax.toLocaleString('es-AR')}</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
+                                <div>${escrowInfoHtml}</div>
+                                <button class="btn ${!haFinalizado && !esLider ? 'btn-warning text-dark fw-bold' : 'btn-outline-primary-custom'} btn-sm px-3" onclick="abrirSalaEnVivo(${subId})">
+                                    ${!haFinalizado && !esLider ? '<i class="fa-solid fa-arrow-up me-1"></i>Pujar' : '<i class="fa-solid fa-gavel me-1"></i>Ver Sala'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
             contenedorPujas.appendChild(col);
         }
 
-        if (sub.vendedorId === usuarioActual.id) {
+        // 2. Publicaciones creadas por el usuario actual como vendedor
+        if (subVendedorId === usuarioActual.id) {
             misPublicacionesCount++;
             const colPub = document.createElement('div');
-            colPub.className = 'col-md-6 mb-3';
+            colPub.className = 'col-lg-6 col-12 mb-3';
             colPub.innerHTML = `
-                <div class="card h-100 border p-3 shadow-sm">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="fw-bold text-dark mb-0">${sub.titulo}</h6>
-                        <span class="badge bg-primary-custom">${sub.estado}</span>
-                    </div>
-                    <p class="text-muted extra-small mb-2">Precio Base: <strong>$${sub.precioBase.toLocaleString()}</strong> | Total Ofertas: <strong>${(sub.pujas || []).length}</strong></p>
-                    <div class="d-flex justify-content-between align-items-center border-top pt-2">
-                        <span class="fw-bold text-success">Puja Máxima: $${obtenerPujaMaxima(sub).toLocaleString()}</span>
-                        <button class="btn btn-outline-primary-custom btn-sm" onclick="abrirSalaEnVivo(${sub.id})">Administrar</button>
+                <div class="card h-100 border p-3 shadow-sm activity-card">
+                    <div class="d-flex gap-3">
+                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
+                                <span class="badge ${haFinalizado ? 'bg-secondary' : 'bg-primary-custom'}">${haFinalizado ? 'FINALIZADA' : subEstado}</span>
+                            </div>
+                            <div class="extra-small text-muted mb-2">
+                                <span class="badge bg-light text-dark border me-1">${catNombre}</span>
+                                <span>${pujas.length} oferta${pujas.length === 1 ? '' : 's'} recibida${pujas.length === 1 ? '' : 's'}</span>
+                            </div>
+                            <div class="bg-light p-2 rounded-2 border extra-small mb-2">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Precio base:</span>
+                                    <span class="fw-semibold text-dark">$${subPrecioBase.toLocaleString('es-AR')}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Puja máxima actual:</span>
+                                    <span class="fw-bold text-success">$${pujaAbsolutaMax.toLocaleString('es-AR')}</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
+                                <span class="extra-small text-muted">
+                                    ${pujas.length > 0 ? `<i class="fa-solid fa-users me-1 text-primary-custom"></i>${pujas.length} oferta(s)` : '<i class="fa-regular fa-clock me-1"></i>Sin ofertas aún'}
+                                </span>
+                                <button class="btn btn-outline-primary-custom btn-sm px-3" onclick="abrirSalaEnVivo(${subId})">
+                                    <i class="fa-solid fa-sliders me-1"></i>Administrar
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1042,16 +1285,38 @@ async function cargarMisActividades() {
     });
 
     if (contenedorPujas.children.length === 0) {
-        contenedorPujas.innerHTML = `<div class="col-12 text-muted text-center py-3">Aún no has participado en ninguna subasta con este perfil.</div>`;
+        contenedorPujas.innerHTML = `
+            <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
+                <i class="fa-solid fa-gavel fa-2x mb-2 text-secondary opacity-50"></i>
+                <p class="mb-1 fw-bold">Sin ofertas registradas con ${usuarioActual.nombre}</p>
+                <p class="extra-small mb-3">Aún no has realizado pujas en las subastas disponibles.</p>
+                <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-catalogo').click()">
+                    <i class="fa-solid fa-compass me-1"></i>Explorar Catálogo
+                </button>
+            </div>
+        `;
     }
 
     if (contenedorPublicaciones.children.length === 0) {
-        contenedorPublicaciones.innerHTML = `<div class="col-12 text-muted text-center py-3">No tienes publicaciones activas como vendedor.</div>`;
+        contenedorPublicaciones.innerHTML = `
+            <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
+                <i class="fa-solid fa-store fa-2x mb-2 text-secondary opacity-50"></i>
+                <p class="mb-1 fw-bold">Sin publicaciones con ${usuarioActual.nombre}</p>
+                <p class="extra-small mb-3">No tienes artículos publicados a subasta como vendedor.</p>
+                <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-crear').click()">
+                    <i class="fa-solid fa-plus me-1"></i>Publicar una Subasta
+                </button>
+            </div>
+        `;
     }
 
-    document.getElementById('stat-total-pujas').textContent = misPujasCount;
-    document.getElementById('stat-subastas-creadas').textContent = misPublicacionesCount;
-    document.getElementById('stat-subastas-ganadas').textContent = misGanadasCount;
+    const statPujas = document.getElementById('stat-total-pujas');
+    const statCreadas = document.getElementById('stat-subastas-creadas');
+    const statGanadas = document.getElementById('stat-subastas-ganadas');
+
+    if (statPujas) statPujas.textContent = misPujasCount;
+    if (statCreadas) statCreadas.textContent = misPublicacionesCount;
+    if (statGanadas) statGanadas.textContent = misGanadasCount;
 }
 
 /* ==========================================================================

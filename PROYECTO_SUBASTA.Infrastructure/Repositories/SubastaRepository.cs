@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Infrastructure.Data;
@@ -15,9 +15,10 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 
         public async Task<IEnumerable<Subasta>> ObtenerActivasAsync()
         {
-            // Consultamos las subastas activas incluyendo de forma ansiosa (Eager Loading) sus categorías asociadas.
+            // Consultamos las subastas activas incluyendo de forma ansiosa (Eager Loading) sus categorías y pujas asociadas.
             return await _context.Subastas
                 .Include(s => s.Categoria)
+                .Include(s => s.Pujas)
                 .ToListAsync();
         }
 

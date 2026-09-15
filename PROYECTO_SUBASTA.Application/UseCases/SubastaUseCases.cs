@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using PROYECTO_SUBASTA.Domain.Entities;
@@ -94,10 +94,15 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             if (subasta.Pujas == null) subasta.Pujas = new List<Puja>();
             subasta.Pujas.Add(nuevaPuja);
 
-            // Incrementamos la versión para disparar la concurrencia optimista en EF Core
-            subasta.Version += 1;
-
-            await _subastaRepository.GuardarCambiosAsync();
+            if (versionCliente > 0)
+            {
+                await _subastaRepository.ActualizarConConcurrenciaAsync(subasta, versionCliente);
+            }
+            else
+            {
+                subasta.Version += 1;
+                await _subastaRepository.GuardarCambiosAsync();
+            }
         }
     }
 }
