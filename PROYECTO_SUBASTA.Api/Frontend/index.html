@@ -87,6 +87,9 @@
                         <button class="nav-link text-start" id="tab-actividades" data-bs-toggle="pill" data-bs-target="#content-actividades" type="button" role="tab" aria-controls="content-actividades" aria-selected="false">
                             <i class="fa-solid fa-user-clock me-2"></i>Mis Actividades
                         </button>
+                        <button class="nav-link text-start" id="tab-auditoria" data-bs-toggle="pill" data-bs-target="#content-auditoria" type="button" role="tab" aria-controls="content-auditoria" aria-selected="false">
+                            <i class="fa-solid fa-clipboard-list me-2"></i>Auditoría de Eventos
+                        </button>
                     </div>
 
                     <!-- Consola Rápida Carga Libre para Ramiro Veloso Tester -->
@@ -545,6 +548,92 @@
                                     <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-store me-2 text-primary-custom"></i>Mis Publicaciones como Vendedor</h5>
                                     <div id="actividades-mis-publicaciones" class="row"></div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- =================================================================== -->
+                    <!-- MÓDULO 6: AUDITORÍA DE EVENTOS Y TRAZABILIDAD (AUDIT LOG) -->
+                    <!-- =================================================================== -->
+                    <div class="tab-pane fade" id="content-auditoria" role="tabpanel" aria-labelledby="tab-auditoria">
+                        <div class="card content-card p-4">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                                <div>
+                                    <h3 class="text-primary-custom fw-bold mb-1">
+                                        <i class="fa-solid fa-clipboard-check me-2"></i>Auditoría de Eventos y Trazabilidad (Audit Log)
+                                    </h3>
+                                    <p class="text-muted mb-0">Registro inmutable de eventos críticos: cambios de estado por Worker, extensiones Anti-Sniping, rechazos de puja y recargas de saldo.</p>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-secondary btn-sm" onclick="forzarEjecucionWorker()">
+                                        <i class="fa-solid fa-robot me-1"></i> Forzar Worker
+                                    </button>
+                                    <button class="btn btn-primary-custom btn-sm" onclick="cargarLogsAuditoria()">
+                                        <i class="fa-solid fa-rotate me-1"></i> Actualizar Logs
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Métricas / Filtros de Eventos -->
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-3">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Worker / Estados</span>
+                                        <span id="stat-auditoria-estados" class="fs-4 fw-bold text-primary-custom">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Anti-Sniping</span>
+                                        <span id="stat-auditoria-sniping" class="fs-4 fw-bold text-warning">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Pujas Rechazadas</span>
+                                        <span id="stat-auditoria-rechazadas" class="fs-4 fw-bold text-danger">0</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="border rounded-3 p-3 bg-light text-center">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Acreditaciones Saldo</span>
+                                        <span id="stat-auditoria-acreditaciones" class="fs-4 fw-bold text-success">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Filtro rápido por tipo de acción -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-md-4">
+                                    <select id="filtro-auditoria-accion" class="form-select form-select-sm" onchange="renderizarLogsAuditoriaFiltrados()">
+                                        <option value="">Todos los tipos de evento</option>
+                                        <option value="CAMBIO_ESTADO_SUBASTA">Cambios de Estado (Worker / Sistema)</option>
+                                        <option value="VENTA_REGISTRADA">Ventas Registradas y Liquidaciones</option>
+                                        <option value="EXTENSION_ANTI_SNIPING">Extensiones Anti-Sniping</option>
+                                        <option value="PUJA_RECHAZADA">Pujas Rechazadas (Negocio)</option>
+                                        <option value="PUJA_RECHAZADA_CONCURRENCIA">Pujas Rechazadas (Concurrencia)</option>
+                                        <option value="ACREDITACION_MANUAL_SALDO">Acreditaciones Manuales de Saldo</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light extra-small text-uppercase">
+                                        <tr>
+                                            <th style="width: 70px;"># ID</th>
+                                            <th style="width: 210px;">Evento / Acción</th>
+                                            <th>Detalle del Evento</th>
+                                            <th style="width: 140px;">Usuario Ref.</th>
+                                            <th style="width: 160px;">Fecha / Hora (UTC-3)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabla-logs-auditoria">
+                                        <tr>
+                                            <td colspan="5" class="text-center text-muted py-4">Cargando registros de auditoría...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

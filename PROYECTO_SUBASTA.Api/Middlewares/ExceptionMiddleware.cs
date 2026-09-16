@@ -45,12 +45,38 @@ namespace PROYECTO_SUBASTA.Api.Middlewares
                     statusCode = HttpStatusCode.Conflict;
                     mensaje = "Conflicto de concurrencia (409): La subasta fue modificada por otro usuario en simultáneo. Intente nuevamente.";
                     _logger.LogWarning("Conflicto de concurrencia optimista detectado por EF Core: {Mensaje}", ex.Message);
+                    try
+                    {
+                        var auditoria = context.RequestServices.GetService<PROYECTO_SUBASTA.Application.UseCases.IAuditoriaService>();
+                        if (auditoria != null)
+                        {
+                            _ = auditoria.RegistrarAsync(
+                                "PUJA_RECHAZADA_CONCURRENCIA",
+                                $"Conflicto de concurrencia optimista detectado en ruta {context.Request.Path}: {mensaje}",
+                                null
+                            );
+                        }
+                    }
+                    catch { }
                     break;
 
                 case ConcurrenciaException ex:
                     statusCode = HttpStatusCode.Conflict;
                     mensaje = ex.Message;
                     _logger.LogWarning("Conflicto de concurrencia: {Mensaje}", ex.Message);
+                    try
+                    {
+                        var auditoria = context.RequestServices.GetService<PROYECTO_SUBASTA.Application.UseCases.IAuditoriaService>();
+                        if (auditoria != null)
+                        {
+                            _ = auditoria.RegistrarAsync(
+                                "PUJA_RECHAZADA_CONCURRENCIA",
+                                $"Conflicto de concurrencia detectado en ruta {context.Request.Path}: {mensaje}",
+                                null
+                            );
+                        }
+                    }
+                    catch { }
                     break;
 
                 case RecursoNoEncontradoException ex:

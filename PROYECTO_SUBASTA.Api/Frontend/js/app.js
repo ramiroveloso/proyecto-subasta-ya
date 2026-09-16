@@ -203,6 +203,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await aplicarFiltros();
     await actualizarBilleteraUI();
     await cargarMisActividades();
+    await cargarLogsAuditoria();
 
     timerCardsInterval = setInterval(actualizarTemporizadoresCatalogo, 1000);
 });
@@ -370,6 +371,7 @@ async function cargarSaldoLibreRapido(monto) {
         usuarioActual.saldoInicial = (usuarioActual.saldoInicial || 0) + monto;
         await actualizarBilleteraUI();
         await renderizarSelectorPerfilesSemilla();
+        await cargarLogsAuditoria();
     } catch (e) {
         mostrarToast(`Error al recargar: ${e.message}`, 'Error', 'danger');
     }
@@ -794,7 +796,7 @@ function actualizarTemporizadoresCatalogo() {
             t.innerHTML = formatFechaHoraCortaUTC3(sub.fechaFin ?? sub.FechaFin);
             t.className = 'badge bg-secondary text-white border fw-semibold card-timer';
         } else { // DESIERTA
-            t.innerHTML = 'DESIERTA';
+            t.innerHTML = `DESIERTA (${formatFechaHoraCortaUTC3(sub.fechaFin ?? sub.FechaFin)})`;
             t.className = 'badge bg-dark text-white border fw-semibold card-timer';
         }
     });
@@ -1245,13 +1247,21 @@ async function enviarPuja(event) {
         const versionActual = subastaSeleccionadaSala.version || subastaSeleccionadaSala.Version || 1;
         const resPuja = await fetchRegistrarPuja(subastaSeleccionadaSala.id, usuarioActual.id, montoInput, versionActual);
 
-        const ahora = Date.now();
-        const fechaFinMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
         let antiSnipingActivado = false;
-
-        if ((fechaFinMs - ahora) <= 60000 && (fechaFinMs - ahora) > 0) {
-            subastaSeleccionadaSala.fechaFin = new Date(fechaFinMs + 60000).toISOString();
+        if (resPuja && resPuja.antiSnipingActivado) {
             antiSnipingActivado = true;
+            if (resPuja.fechaFin) {
+                subastaSeleccionadaSala.fechaFin = resPuja.fechaFin;
+            }
+        } else if (resPuja && resPuja.fechaFin) {
+            subastaSeleccionadaSala.fechaFin = resPuja.fechaFin;
+        } else {
+            const ahora = Date.now();
+            const fechaFinMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
+            if ((fechaFinMs - ahora) <= 60000 && (fechaFinMs - ahora) > 0) {
+                subastaSeleccionadaSala.fechaFin = new Date(fechaFinMs + 60000).toISOString();
+                antiSnipingActivado = true;
+            }
         }
 
         const anonHandle = `Postor #${(usuarioActual.id * 33 + 100).toString(16).toUpperCase()}`;
@@ -1304,8 +1314,10 @@ async function enviarPuja(event) {
         await actualizarBilleteraUI();
         await sincronizarSaldosDropdown();
         await cargarMisActividades();
+        await cargarLogsAuditoria();
 
     } catch (err) {
+        await cargarLogsAuditoria();
         if (err.status === 400 || err.status === 422 || (err.message && err.message.toLowerCase().includes('saldo insuficiente'))) {
             abrirModalSaldoInsuficiente(montoInput);
         } else if (err.status === 409) {
@@ -1407,6 +1419,7 @@ async function procesarCargaSaldoModal(event) {
         usuarioActual.saldoInicial = (usuarioActual.saldoInicial || 0) + monto;
         await actualizarBilleteraUI();
         await renderizarSelectorPerfilesSemilla();
+        await cargarLogsAuditoria();
 
     } catch (err) {
         mostrarToast(`Error al cargar saldo: ${err.message}`, 'Error', 'danger');
@@ -1745,6 +1758,8 @@ function configurarEventosUI() {
                 await actualizarBilleteraUI();
             } else if (targetId === '#content-actividades') {
                 await cargarMisActividades();
+            } else if (targetId === '#content-auditoria') {
+                await cargarLogsAuditoria();
             }
         });
     });
@@ -1789,3 +1804,129 @@ function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info') {
         toastElem.remove();
     });
 }
+
+/* ==========================================================================
+   MÓDULO 6: AUDITORÍA DE EVENTOS Y TRAZABILIDAD (AUDIT LOG)
+   ========================================================================== */
+
+let logsAuditoriaCache = [];
+
+async function cargarLogsAuditoria() {
+    const tabla = document.getElementById('tabla-logs-auditoria');
+    if (!tabla) return;
+
+    try {
+        const logs = await fetchObtenerAuditoria(100);
+        logsAuditoriaCache = logs || [];
+
+        actualizarMetricasAuditoria(logsAuditoriaCache);
+        renderizarLogsAuditoriaFiltrados();
+    } catch (e) {
+        console.error("Error al cargar logs de auditoría:", e);
+        if (tabla) {
+            tabla.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">Error al cargar registros de auditoría.</td></tr>`;
+        }
+    }
+}
+
+function actualizarMetricasAuditoria(logs) {
+    const statEstados = document.getElementById('stat-auditoria-estados');
+    const statSniping = document.getElementById('stat-auditoria-sniping');
+    const statRechazadas = document.getElementById('stat-auditoria-rechazadas');
+    const statAcreditaciones = document.getElementById('stat-auditoria-acreditaciones');
+
+    if (!statEstados || !logs) return;
+
+    let cEstados = 0;
+    let cSniping = 0;
+    let cRechazos = 0;
+    let cAcreditaciones = 0;
+
+    logs.forEach(l => {
+        const accion = (l.accion ?? l.Accion ?? '').toUpperCase();
+        if (accion.includes('ESTADO') || accion.includes('VENTA')) cEstados++;
+        if (accion.includes('SNIPING')) cSniping++;
+        if (accion.includes('RECHAZ')) cRechazos++;
+        if (accion.includes('ACREDITACION') || accion.includes('CARGA')) cAcreditaciones++;
+    });
+
+    statEstados.textContent = cEstados;
+    statSniping.textContent = cSniping;
+    statRechazadas.textContent = cRechazos;
+    statAcreditaciones.textContent = cAcreditaciones;
+}
+
+function renderizarLogsAuditoriaFiltrados() {
+    const tabla = document.getElementById('tabla-logs-auditoria');
+    if (!tabla) return;
+
+    const filtro = document.getElementById('filtro-auditoria-accion')?.value || '';
+    let filtrados = logsAuditoriaCache;
+    if (filtro) {
+        filtrados = logsAuditoriaCache.filter(l => (l.accion ?? l.Accion) === filtro);
+    }
+
+    if (filtrados.length === 0) {
+        tabla.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No hay eventos registrados en este criterio de auditoría.</td></tr>`;
+        return;
+    }
+
+    tabla.innerHTML = '';
+    filtrados.forEach(log => {
+        const id = log.id ?? log.Id;
+        const accion = log.accion ?? log.Accion ?? '';
+        const detalle = log.detalle ?? log.Detalle ?? '';
+        const usuarioId = log.usuarioId ?? log.UsuarioId;
+        const fechaStr = log.fechaRegistro ?? log.FechaRegistro;
+
+        let badgeInfo = getBadgeAuditoria(accion);
+        let usuarioTexto = usuarioId ? `<span class="badge bg-light text-dark border">Usuario #${usuarioId}</span>` : '<span class="badge bg-secondary text-white">Worker / Sistema</span>';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="font-monospace text-muted small fw-bold">#${id}</td>
+            <td><span class="badge ${badgeInfo.badge}">${badgeInfo.label}</span></td>
+            <td class="small text-break">${detalle}</td>
+            <td class="small">${usuarioTexto}</td>
+            <td class="small text-nowrap font-monospace text-secondary">${formatFechaHoraCortaUTC3(fechaStr)}</td>
+        `;
+        tabla.appendChild(tr);
+    });
+}
+
+function getBadgeAuditoria(accion) {
+    switch (accion) {
+        case 'CAMBIO_ESTADO_SUBASTA':
+            return { badge: 'bg-primary text-white', label: '<i class="fa-solid fa-arrows-rotate me-1"></i> Cambio de Estado' };
+        case 'VENTA_REGISTRADA':
+            return { badge: 'bg-success text-white', label: '<i class="fa-solid fa-handshake me-1"></i> Venta / Liquidación' };
+        case 'EXTENSION_ANTI_SNIPING':
+            return { badge: 'bg-warning text-dark', label: '<i class="fa-solid fa-shield-cat me-1"></i> Anti-Sniping (+60s)' };
+        case 'PUJA_RECHAZADA':
+            return { badge: 'bg-danger text-white', label: '<i class="fa-solid fa-ban me-1"></i> Puja Rechazada (Negocio)' };
+        case 'PUJA_RECHAZADA_CONCURRENCIA':
+            return { badge: 'bg-dark text-white', label: '<i class="fa-solid fa-triangle-exclamation me-1"></i> Conflicto Concurrencia (409)' };
+        case 'ACREDITACION_MANUAL_SALDO':
+            return { badge: 'bg-info text-dark', label: '<i class="fa-solid fa-wallet me-1"></i> Acreditación Manual' };
+        default:
+            return { badge: 'bg-secondary text-white', label: accion };
+    }
+}
+
+async function forzarEjecucionWorker() {
+    try {
+        mostrarToast('Invocando verificación del Background Worker...', 'Worker en Proceso', 'info');
+        const res = await fetchProcesarSubastasVencidas();
+        if (res) {
+            mostrarToast(`Worker finalizado. Activadas: ${res.subastasActivadas ?? 0}, Adjudicadas: ${res.subastasFinalizadas ?? 0}, Desiertas: ${res.subastasDesiertas ?? 0}`, 'Worker Ejecutado', 'success');
+        } else {
+            mostrarToast('Se ejecutó la verificación periódica de subastas.', 'Worker Ejecutado', 'info');
+        }
+        await aplicarFiltros();
+        await cargarMisActividades();
+        await cargarLogsAuditoria();
+    } catch (e) {
+        mostrarToast('Error al forzar la ejecución del worker.', 'Error Worker', 'danger');
+    }
+}
+

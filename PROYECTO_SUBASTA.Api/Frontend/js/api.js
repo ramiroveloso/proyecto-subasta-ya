@@ -506,3 +506,48 @@ async function fetchLiberarSaldo(usuarioId, monto, subastaId) {
         return { mensaje: 'Saldo liberado y reintegrado al disponible.' };
     }
 }
+
+let MOCK_AUDITORIA = [
+    {
+        id: 1,
+        usuarioId: 2,
+        accion: 'CAMBIO_ESTADO_SUBASTA',
+        detalle: "Subasta #4 ('Campera de Cuero Vintage') finalizada y adjudicada por Background Worker. Ganador: Usuario #2 (Comprador Líder) con oferta de $25.000,00.",
+        fechaRegistro: new Date(Date.now() - 2 * 3600000).toISOString()
+    },
+    {
+        id: 2,
+        usuarioId: 1,
+        accion: 'VENTA_REGISTRADA',
+        detalle: "Liquidación final de Subasta #4: Saldo retenido ($25.000,00) de Comprador Líder transferido a Billetera de Vendedor Test.",
+        fechaRegistro: new Date(Date.now() - 2 * 3600000).toISOString()
+    },
+    {
+        id: 3,
+        usuarioId: null,
+        accion: 'CAMBIO_ESTADO_SUBASTA',
+        detalle: "Subasta #5 ('Repuesto Clásico de Vehículo') declarada DESIERTA por el Background Worker al vencer el tiempo sin ofertas.",
+        fechaRegistro: new Date(Date.now() - 24 * 3600000).toISOString()
+    }
+];
+
+async function fetchObtenerAuditoria(limite = 100) {
+    try {
+        return await apiFetch(`/Auditoria?limite=${limite}`);
+    } catch (e) {
+        console.warn("No se pudieron cargar logs de auditoría de la API, usando fallback local.", e);
+        return MOCK_AUDITORIA || [];
+    }
+}
+
+async function fetchProcesarSubastasVencidas() {
+    try {
+        return await apiFetch('/Subastas/procesar-vencidas', {
+            method: 'POST'
+        });
+    } catch (e) {
+        console.warn("Error al invocar procesar-vencidas.", e);
+        return null;
+    }
+}
+

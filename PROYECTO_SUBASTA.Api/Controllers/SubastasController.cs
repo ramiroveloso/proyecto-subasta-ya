@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.UseCases;
 using System.Threading.Tasks;
+using System.Linq;
 using PROYECTO_SUBASTA.Application.DTOs;
 
 namespace PROYECTO_SUBASTA.Api.Controllers
@@ -63,7 +64,6 @@ namespace PROYECTO_SUBASTA.Api.Controllers
                 return NotFound(new { mensaje = $"No se encontró la subasta con el ID {id}." });
             }
 
-            // Mapeo limpio usando tu SubastaResponseDto existente
             var responseDto = new SubastaResponseDto
             {
                 Id = subasta.Id,
@@ -76,10 +76,11 @@ namespace PROYECTO_SUBASTA.Api.Controllers
                 FechaFin = subasta.FechaFin,
                 Estado = subasta.Estado,
                 CategoriaId = subasta.CategoriaId,
+                CategoriaNombre = subasta.Categoria?.Nombre ?? string.Empty,
                 VendedorId = subasta.VendedorId,
                 GanadorId = subasta.GanadorId,
                 PrecioFinal = subasta.PrecioFinal,
-                Version = subasta.Version, // ¡Vital para que viaje el token de concurrencia al frontend!
+                Version = subasta.Version,
                 Pujas = subasta.Pujas?.Select(p => new PujaItemDto
                 {
                     Id = p.Id,
@@ -102,7 +103,6 @@ namespace PROYECTO_SUBASTA.Api.Controllers
                 return BadRequest("Los datos de la subasta son inválidos.");
             }
 
-            // Sin try-catch: Las reglas de negocio rotas lanzan ArgumentException que el Middleware global captura y transforma en 400 Bad Request.
             await _subastaUseCases.CrearAsync(subasta);
 
             return CreatedAtAction(nameof(ObtenerPorId), new { id = subasta.Id }, subasta);
@@ -116,13 +116,16 @@ namespace PROYECTO_SUBASTA.Api.Controllers
                 return BadRequest("Los datos de la puja son inválidos.");
             }
 
-            // Sin try-catch: Las excepciones de concurrencia (409) y negocio (400) fluyen limpiamente hacia el Middleware global.
             var resultado = await _subastaUseCases.RegistrarPujaAsync(id, dto.UsuarioId, dto.Monto, dto.Version);
 
             return Ok(new
             {
-                mensaje = "Puja registrada con éxito y saldo retenido en Escrow.",
+                mensaje = resultado.AntiSnipingActivado
+                    ? "Puja registrada con éxito. ¡Regla Anti-Sniping activada (+60s)!"
+                    : "Puja registrada con éxito y saldo retenido en Escrow.",
                 version = resultado.SubastaVersion,
+                fechaFin = resultado.Subasta.FechaFin,
+                antiSnipingActivado = resultado.AntiSnipingActivado,
                 puja = new PujaItemDto
                 {
                     Id = resultado.Puja.Id,
@@ -132,6 +135,19 @@ namespace PROYECTO_SUBASTA.Api.Controllers
                     FechaCreacion = resultado.Puja.FechaCreacion,
                     PostorAnonimo = $"Postor #{(resultado.Puja.UsuarioId * 33 + 100):X}"
                 }
+            });
+        }
+
+        [HttpPost("procesar-vencidas")]
+        public async Task<IActionResult> ProcesarVencidas([FromServices] IAdjudicacionService adjudicacionService)
+        {
+            var res = await adjudicacionService.ProcesarSubastasVencidasAsync();
+            return Ok(new
+            {
+                mensaje = "Proceso de verificación y adjudicación ejecutado exitosamente.",
+                subastasActivadas = res.Activadas,
+                subastasFinalizadas = res.Finalizadas,
+                subastasDesiertas = res.Desiertas
             });
         }
     }

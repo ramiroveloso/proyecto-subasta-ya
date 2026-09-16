@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Api.Middlewares;
+using PROYECTO_SUBASTA.Api.Workers;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Infrastructure.Data;
 using PROYECTO_SUBASTA.Infrastructure.Repositories;
+using PROYECTO_SUBASTA.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,10 +55,18 @@ builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
 builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
 builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
 
+builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
+builder.Services.AddScoped<IAdjudicacionService, AdjudicacionService>();
+
 builder.Services.AddScoped<CategoriaUseCases>();
 builder.Services.AddScoped<SubastaUseCases>();
 builder.Services.AddScoped<UsuarioUseCases>();
 builder.Services.AddScoped<IBilleteraService, BilleteraService>();
+
+// ========================================================================
+// 2.3 PROCESO EN SEGUNDO PLANO (BACKGROUND WORKER)
+// ========================================================================
+builder.Services.AddHostedService<SubastaBackgroundWorker>();
 
 var app = builder.Build();
 
@@ -88,7 +98,7 @@ using (var scope = app.Services.CreateScope())
         // Subasta 1: ACTIVA (cierra en ~25 min)
         // Subasta 2: ACTIVA crítica (cierra en ~2 min para anti-sniping)
         // Subasta 3: PROGRAMADA (+24 hs)
-        // Subasta 4: FINALIZADA (cerrada con ganador)
+        // Subasta 4: FINALIZADA (cerrada con ganador: Usuario 2 "Comprador Líder")
         // Subasta 5: DESIERTA (cerrada sin ofertas)
         // ========================================================================
         var ahoraUtc = DateTime.UtcNow;
@@ -117,22 +127,75 @@ using (var scope = app.Services.CreateScope())
             subasta3.Estado = "PROGRAMADA";
         }
 
+        // Subasta 4 (Dato Semilla Obligatorio: Finalizada con ganador Comprador Líder)
         var subasta4 = context.Subastas.Find(4);
-        if (subasta4 != null && subasta4.FechaFin > ahoraUtc)
+        if (subasta4 == null)
+        {
+            subasta4 = new Subasta
+            {
+                Id = 4,
+                VendedorId = 1,
+                CategoriaId = 3,
+                Titulo = "Campera de Cuero Vintage",
+                Descripcion = "Indumentaria clásica",
+                UrlImagen = "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500",
+                PrecioBase = 20000.00m,
+                IncrementoMinimo = 2000.00m,
+                FechaInicio = ahoraUtc.AddDays(-2),
+                FechaFin = ahoraUtc.AddHours(-2),
+                Estado = "FINALIZADA",
+                GanadorId = 2, // Comprador Líder
+                PrecioFinal = 25000.00m,
+                Version = 2
+            };
+            context.Subastas.Add(subasta4);
+        }
+        else
         {
             subasta4.FechaInicio = ahoraUtc.AddDays(-2);
             subasta4.FechaFin = ahoraUtc.AddHours(-2);
             subasta4.Estado = "FINALIZADA";
-            subasta4.GanadorId = 2;
+            subasta4.GanadorId = 2; // Usuario con distinción de Comprador (Comprador Líder)
             subasta4.PrecioFinal = 25000.00m;
         }
 
+        // Subasta 5 (Dato Semilla Obligatorio: DESIERTA sin ofertas)
         var subasta5 = context.Subastas.Find(5);
-        if (subasta5 != null && subasta5.FechaFin > ahoraUtc)
+        if (subasta5 == null)
+        {
+            subasta5 = new Subasta
+            {
+                Id = 5,
+                VendedorId = 1,
+                CategoriaId = 4,
+                Titulo = "Repuesto Clásico de Vehículo",
+                Descripcion = "Sin ofertas registradas",
+                UrlImagen = "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500",
+                PrecioBase = 80000.00m,
+                IncrementoMinimo = 10000.00m,
+                FechaInicio = ahoraUtc.AddDays(-3),
+                FechaFin = ahoraUtc.AddDays(-1),
+                Estado = "DESIERTA",
+                GanadorId = null,
+                PrecioFinal = null,
+                Version = 1
+            };
+            context.Subastas.Add(subasta5);
+        }
+        else
         {
             subasta5.FechaInicio = ahoraUtc.AddDays(-3);
             subasta5.FechaFin = ahoraUtc.AddDays(-1);
             subasta5.Estado = "DESIERTA";
+            subasta5.GanadorId = null;
+            subasta5.PrecioFinal = null;
+
+            // Garantizar que la subasta 5 no tenga pujas asociadas
+            var pujasSub5 = context.Pujas.Where(p => p.SubastaId == 5).ToList();
+            if (pujasSub5.Any())
+            {
+                context.Pujas.RemoveRange(pujasSub5);
+            }
         }
 
         // Sincronizar fechas de pujas y movimientos demo de las subastas activas
@@ -140,6 +203,73 @@ using (var scope = app.Services.CreateScope())
         if (puja1 != null) puja1.FechaCreacion = ahoraUtc.AddMinutes(-15);
         var puja2 = context.Pujas.Find(2);
         if (puja2 != null) puja2.FechaCreacion = ahoraUtc.AddMinutes(-5);
+
+        // Garantizar puja ganadora para Subasta 4
+        var pujaGanadora4 = context.Pujas.FirstOrDefault(p => p.SubastaId == 4);
+        if (pujaGanadora4 == null)
+        {
+            context.Pujas.Add(new Puja
+            {
+                Id = 3,
+                SubastaId = 4,
+                UsuarioId = 2, // Comprador Líder
+                Monto = 25000.00m,
+                FechaCreacion = ahoraUtc.AddDays(-1)
+            });
+        }
+
+        // Garantizar asientos contables de liquidación (PAGO / COBRO) para Subasta 4
+        if (!context.TransactionLedgers.Any(t => t.SubastaId == 4 && t.Tipo == TipoTransaccion.PAGO))
+        {
+            context.TransactionLedgers.Add(new TransactionLedger
+            {
+                BilleteraId = 2, // Billetera Comprador Líder
+                Tipo = TipoTransaccion.PAGO,
+                Monto = 25000.00m,
+                Fecha = ahoraUtc.AddHours(-2),
+                SubastaId = 4
+            });
+        }
+
+        if (!context.TransactionLedgers.Any(t => t.SubastaId == 4 && t.Tipo == TipoTransaccion.COBRO))
+        {
+            context.TransactionLedgers.Add(new TransactionLedger
+            {
+                BilleteraId = 1, // Billetera Vendedor Test
+                Tipo = TipoTransaccion.COBRO,
+                Monto = 25000.00m,
+                Fecha = ahoraUtc.AddHours(-2),
+                SubastaId = 4
+            });
+        }
+
+        // Logs de auditoría semilla si la tabla está vacía
+        if (!context.LogsAuditoria.Any())
+        {
+            context.LogsAuditoria.AddRange(
+                new LogAuditoria
+                {
+                    Accion = "CAMBIO_ESTADO_SUBASTA",
+                    Detalle = "Subasta #4 ('Campera de Cuero Vintage') finalizada y adjudicada por Background Worker. Ganador: Usuario #2 (Comprador Líder) con oferta de $25.000,00.",
+                    UsuarioId = 2,
+                    FechaRegistro = ahoraUtc.AddHours(-2)
+                },
+                new LogAuditoria
+                {
+                    Accion = "VENTA_REGISTRADA",
+                    Detalle = "Liquidación final de Subasta #4: Saldo retenido ($25.000,00) de Comprador Líder transferido a Billetera de Vendedor Test.",
+                    UsuarioId = 1,
+                    FechaRegistro = ahoraUtc.AddHours(-2)
+                },
+                new LogAuditoria
+                {
+                    Accion = "CAMBIO_ESTADO_SUBASTA",
+                    Detalle = "Subasta #5 ('Repuesto Clásico de Vehículo') declarada DESIERTA por el Background Worker al vencer el tiempo sin ofertas.",
+                    UsuarioId = null,
+                    FechaRegistro = ahoraUtc.AddDays(-1)
+                }
+            );
+        }
 
         context.SaveChanges();
     }
