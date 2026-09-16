@@ -3,9 +3,9 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const url = 'https://localhost:65102/api/Subastas/1/pujas';
 
 const payload = {
-    usuarioId: 1,
+    usuarioId: 2,
     monto: 85000,
-    version: 0 // Asegúrate de que coincida con la versión actual en tu BD
+    version: 3 // Asegúrate de que coincida con la versión actual en tu BD (ej. 3 para Subasta 1)
 };
 
 async function enviarPuja(id) {

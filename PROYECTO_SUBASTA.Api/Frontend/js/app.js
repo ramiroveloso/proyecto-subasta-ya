@@ -1221,6 +1221,12 @@ async function enviarPuja(event) {
         return;
     }
 
+    let retencionRealizada = false;
+    let liberacionMismoUsuarioRealizada = false;
+    let liberacionOtroUsuarioRealizada = false;
+    let prevUsuarioId = null;
+    let prevMonto = 0;
+
     try {
         let pujaPreviaLiberar = null;
         if (pujasPrevias.length > 0) {
@@ -1228,23 +1234,26 @@ async function enviarPuja(event) {
             pujaPreviaLiberar = sortedPrevias[0];
         }
 
-        const prevUsuarioId = pujaPreviaLiberar ? (pujaPreviaLiberar.usuarioId ?? pujaPreviaLiberar.UsuarioId) : null;
-        const prevMonto = pujaPreviaLiberar ? (pujaPreviaLiberar.monto ?? pujaPreviaLiberar.Monto) : 0;
+        prevUsuarioId = pujaPreviaLiberar ? (pujaPreviaLiberar.usuarioId ?? pujaPreviaLiberar.UsuarioId) : null;
+        prevMonto = pujaPreviaLiberar ? (pujaPreviaLiberar.monto ?? pujaPreviaLiberar.Monto) : 0;
 
         if (pujaPreviaLiberar && prevUsuarioId === usuarioActual.id) {
             // Mismo usuario incrementa su oferta: liberar la retención anterior para contar con los fondos
             await fetchLiberarSaldo(usuarioActual.id, prevMonto, subastaSeleccionadaSala.id);
+            liberacionMismoUsuarioRealizada = true;
         }
 
         await fetchRetenerSaldo(usuarioActual.id, montoInput, subastaSeleccionadaSala.id);
+        retencionRealizada = true;
 
         if (pujaPreviaLiberar && prevUsuarioId !== usuarioActual.id) {
             // Se superó la oferta del postor anterior (Outbid): liberar su garantía Escrow
             await fetchLiberarSaldo(prevUsuarioId, prevMonto, subastaSeleccionadaSala.id);
+            liberacionOtroUsuarioRealizada = true;
         }
 
         // Llamada formal a la API REST (o simulación local) para asentar la puja y validar concurrencia optimista
-        const versionActual = subastaSeleccionadaSala.version || subastaSeleccionadaSala.Version || 1;
+        const versionActual = Number(subastaSeleccionadaSala.version ?? subastaSeleccionadaSala.Version ?? 1);
         const resPuja = await fetchRegistrarPuja(subastaSeleccionadaSala.id, usuarioActual.id, montoInput, versionActual);
 
         let antiSnipingActivado = false;
@@ -1279,10 +1288,10 @@ async function enviarPuja(event) {
             subastaSeleccionadaSala.pujas.push(nuevaPuja);
         }
 
-        if (resPuja && resPuja.version) {
+        if (resPuja && (resPuja.version !== undefined && resPuja.version !== null)) {
             subastaSeleccionadaSala.version = resPuja.version;
         } else {
-            subastaSeleccionadaSala.version = (subastaSeleccionadaSala.version || 1) + 1;
+            subastaSeleccionadaSala.version = Number(subastaSeleccionadaSala.version ?? 1) + 1;
         }
 
         const indexSub = subastasCache.findIndex(s => s.id === subastaSeleccionadaSala.id);
@@ -1317,10 +1326,34 @@ async function enviarPuja(event) {
         await cargarLogsAuditoria();
 
     } catch (err) {
+        // Rollback defensivo de fondos si la API rechazó la puja (error 409, 400, red, etc.)
+        if (retencionRealizada) {
+            try {
+                await fetchLiberarSaldo(usuarioActual.id, montoInput, subastaSeleccionadaSala.id);
+                if (liberacionMismoUsuarioRealizada && prevUsuarioId) {
+                    await fetchRetenerSaldo(usuarioActual.id, prevMonto, subastaSeleccionadaSala.id);
+                }
+                if (liberacionOtroUsuarioRealizada && prevUsuarioId) {
+                    await fetchRetenerSaldo(prevUsuarioId, prevMonto, subastaSeleccionadaSala.id);
+                }
+                await actualizarBilleteraUI();
+                await sincronizarSaldosDropdown();
+            } catch (rbErr) {
+                console.error("Error al revertir retención de saldo:", rbErr);
+            }
+        }
+
         await cargarLogsAuditoria();
         if (err.status === 400 || err.status === 422 || (err.message && err.message.toLowerCase().includes('saldo insuficiente'))) {
             abrirModalSaldoInsuficiente(montoInput);
         } else if (err.status === 409) {
+            try {
+                const subFresca = await fetchObtenerSubastaPorId(subastaSeleccionadaSala.id);
+                subastaSeleccionadaSala.version = subFresca.version ?? subFresca.Version ?? 1;
+                subastaSeleccionadaSala.pujas = subFresca.pujas ?? subFresca.Pujas ?? [];
+                actualizarMonitorPujasSala();
+                actualizarTarjetasCatalogo();
+            } catch {}
             abrirModalConcurrenciaOptimista();
         } else {
             mostrarToast(`No se pudo procesar la puja: ${err.message}`, 'Error de Operación', 'danger');

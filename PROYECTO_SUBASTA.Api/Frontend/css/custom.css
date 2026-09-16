@@ -101,6 +101,11 @@ body {
     color: #000000;
 }
 
+.bg-gold {
+    background-color: var(--accent-gold) !important;
+    color: #1a1a1a !important;
+}
+
 /* --- Header / Navbar --- */
 .navbar-custom {
     background: linear-gradient(135deg, #581845 0%, #3e1030 100%);
@@ -589,6 +594,62 @@ body {
 [data-bs-theme="dark"] .btn-outline-secondary:hover {
     background-color: #334155;
     color: #f8fafc;
+}
+
+/* ==========================================================================
+   ETIQUETAS / BADGES EN MODO OSCURO (TEXTO BLANCO SOBRE FONDO NARANJA)
+   Reemplaza texto blanco sobre amarillo por texto blanco sobre naranja para máxima legibilidad
+   ========================================================================== */
+[data-bs-theme="dark"] .badge.bg-warning,
+[data-bs-theme="dark"] .badge.bg-warning-subtle,
+[data-bs-theme="dark"] .badge.bg-gold,
+[data-bs-theme="dark"] .bg-gold,
+[data-bs-theme="dark"] .badge-status.bg-warning,
+[data-bs-theme="dark"] .badge-status.bg-warning-subtle,
+[data-bs-theme="dark"] .card-timer.bg-warning,
+[data-bs-theme="dark"] .card-timer.bg-warning-subtle,
+[data-bs-theme="dark"] .anti-sniping-badge.bg-warning,
+[data-bs-theme="dark"] .api-status-badge.bg-warning,
+[data-bs-theme="dark"] .toast-header.bg-warning,
+[data-bs-theme="dark"] span.badge[class*="bg-warning"] {
+    background-color: #c25e00 !important;
+    color: #ffffff !important;
+    border-color: #e65100 !important;
+}
+
+[data-bs-theme="dark"] .badge.bg-warning *,
+[data-bs-theme="dark"] .badge.bg-warning-subtle *,
+[data-bs-theme="dark"] .badge.bg-gold *,
+[data-bs-theme="dark"] .badge-status.bg-warning *,
+[data-bs-theme="dark"] .badge-status.bg-warning-subtle *,
+[data-bs-theme="dark"] .card-timer.bg-warning *,
+[data-bs-theme="dark"] .card-timer.bg-warning-subtle *,
+[data-bs-theme="dark"] .anti-sniping-badge.bg-warning *,
+[data-bs-theme="dark"] .api-status-badge.bg-warning * {
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .btn-warning {
+    background-color: #c25e00 !important;
+    border-color: #a04000 !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .btn-warning:hover {
+    background-color: #a04000 !important;
+    border-color: #803000 !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-warning {
+    color: #ea580c !important;
+    border-color: #c25e00 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-warning:hover {
+    background-color: #c25e00 !important;
+    color: #ffffff !important;
+    border-color: #c25e00 !important;
 }
 
 /* Badges de saldo y retención en dropdown */

@@ -103,28 +103,49 @@ using (var scope = app.Services.CreateScope())
         // ========================================================================
         var ahoraUtc = DateTime.UtcNow;
 
-        var subasta1 = context.Subastas.Find(1);
-        if (subasta1 != null && (subasta1.FechaFin <= ahoraUtc || subasta1.Estado != "ACTIVA"))
+        var subasta1 = context.Subastas.Include(s => s.Pujas).FirstOrDefault(s => s.Id == 1);
+        if (subasta1 != null)
         {
-            subasta1.FechaInicio = ahoraUtc.AddMinutes(-20);
-            subasta1.FechaFin = ahoraUtc.AddMinutes(25);
-            subasta1.Estado = "ACTIVA";
+            if (subasta1.FechaFin <= ahoraUtc || subasta1.Estado != "ACTIVA")
+            {
+                subasta1.FechaInicio = ahoraUtc.AddMinutes(-20);
+                subasta1.FechaFin = ahoraUtc.AddMinutes(25);
+                subasta1.Estado = "ACTIVA";
+            }
+            if (subasta1.Version == 0)
+            {
+                subasta1.Version = (uint)(subasta1.Pujas?.Count > 0 ? subasta1.Pujas.Count + 1 : 3);
+            }
         }
 
-        var subasta2 = context.Subastas.Find(2);
-        if (subasta2 != null && (subasta2.FechaFin <= ahoraUtc || subasta2.Estado != "ACTIVA"))
+        var subasta2 = context.Subastas.Include(s => s.Pujas).FirstOrDefault(s => s.Id == 2);
+        if (subasta2 != null)
         {
-            subasta2.FechaInicio = ahoraUtc.AddMinutes(-58);
-            subasta2.FechaFin = ahoraUtc.AddSeconds(120);
-            subasta2.Estado = "ACTIVA";
+            if (subasta2.FechaFin <= ahoraUtc || subasta2.Estado != "ACTIVA")
+            {
+                subasta2.FechaInicio = ahoraUtc.AddMinutes(-58);
+                subasta2.FechaFin = ahoraUtc.AddSeconds(120);
+                subasta2.Estado = "ACTIVA";
+            }
+            if (subasta2.Version == 0)
+            {
+                subasta2.Version = (uint)(subasta2.Pujas?.Count > 0 ? subasta2.Pujas.Count + 1 : 1);
+            }
         }
 
         var subasta3 = context.Subastas.Find(3);
-        if (subasta3 != null && subasta3.FechaInicio <= ahoraUtc)
+        if (subasta3 != null)
         {
-            subasta3.FechaInicio = ahoraUtc.AddHours(24);
-            subasta3.FechaFin = ahoraUtc.AddHours(48);
-            subasta3.Estado = "PROGRAMADA";
+            if (subasta3.FechaInicio <= ahoraUtc)
+            {
+                subasta3.FechaInicio = ahoraUtc.AddHours(24);
+                subasta3.FechaFin = ahoraUtc.AddHours(48);
+                subasta3.Estado = "PROGRAMADA";
+            }
+            if (subasta3.Version == 0)
+            {
+                subasta3.Version = 1;
+            }
         }
 
         // Subasta 4 (Dato Semilla Obligatorio: Finalizada con ganador Comprador Líder)
@@ -157,6 +178,7 @@ using (var scope = app.Services.CreateScope())
             subasta4.Estado = "FINALIZADA";
             subasta4.GanadorId = 2; // Usuario con distinción de Comprador (Comprador Líder)
             subasta4.PrecioFinal = 25000.00m;
+            if (subasta4.Version == 0) subasta4.Version = 2;
         }
 
         // Subasta 5 (Dato Semilla Obligatorio: DESIERTA sin ofertas)
@@ -189,12 +211,23 @@ using (var scope = app.Services.CreateScope())
             subasta5.Estado = "DESIERTA";
             subasta5.GanadorId = null;
             subasta5.PrecioFinal = null;
+            if (subasta5.Version == 0) subasta5.Version = 1;
 
             // Garantizar que la subasta 5 no tenga pujas asociadas
             var pujasSub5 = context.Pujas.Where(p => p.SubastaId == 5).ToList();
             if (pujasSub5.Any())
             {
                 context.Pujas.RemoveRange(pujasSub5);
+            }
+        }
+
+        // Garantizar que ninguna subasta en la base de datos quede con Version = 0
+        var todasLasSubastas = context.Subastas.Include(s => s.Pujas).ToList();
+        foreach (var s in todasLasSubastas)
+        {
+            if (s.Version == 0)
+            {
+                s.Version = (uint)(s.Pujas != null && s.Pujas.Count > 0 ? s.Pujas.Count + 1 : 1);
             }
         }
 

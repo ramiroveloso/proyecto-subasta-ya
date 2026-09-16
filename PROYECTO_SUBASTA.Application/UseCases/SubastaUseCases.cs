@@ -156,6 +156,11 @@ namespace PROYECTO_SUBASTA.Application.UseCases
                 throw new InvalidOperationException("No se pueden realizar pujas en una subasta que no está activa.");
             }
 
+            if (subasta.Version == 0)
+            {
+                subasta.Version = (uint)(subasta.Pujas != null && subasta.Pujas.Count > 0 ? subasta.Pujas.Count + 1 : 1);
+            }
+
             decimal pujaMaximaActual = (subasta.Pujas != null && subasta.Pujas.Count > 0)
                 ? subasta.Pujas.Max(p => p.Monto)
                 : subasta.PrecioBase;
