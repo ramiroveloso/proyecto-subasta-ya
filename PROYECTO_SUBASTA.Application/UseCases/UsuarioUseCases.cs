@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using PROYECTO_SUBASTA.Application.DTOs;
 using PROYECTO_SUBASTA.Application.Exceptions;
@@ -18,6 +19,12 @@ namespace PROYECTO_SUBASTA.Application.UseCases
         {
             _usuarioRepository = usuarioRepository;
             _billeteraRepository = billeteraRepository;
+        }
+
+        // Recupera la lista completa de usuarios registrados en el sistema
+        public async Task<IEnumerable<Usuario>> ObtenerTodosAsync()
+        {
+            return await _usuarioRepository.GetAllAsync();
         }
 
         // Firma requerida por los controladores

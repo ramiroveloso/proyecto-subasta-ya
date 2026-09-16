@@ -3,7 +3,7 @@
  * Incluye Carga de Saldo Libre para Perfil Tester: Ramiro Veloso
  */
 
-let usuarioActual = PERFILES_SEMILLA[0]; // Ramiro Veloso Tester por defecto
+let usuarioActual = (typeof PERFILES_SEMILLA !== 'undefined' && PERFILES_SEMILLA.length > 0) ? (PERFILES_SEMILLA[1] || PERFILES_SEMILLA[0]) : null;
 
 let subastasCache = [];
 let categoriasCache = [];
@@ -48,9 +48,23 @@ function aplicarTema(tema) {
 document.addEventListener("DOMContentLoaded", async () => {
     inicializarModoOscuro();
     inicializarFechasFormulario();
+
+    // 1. Cargar perfiles dinámicamente desde la Base de Datos / API
+    const usuariosRemotos = await fetchObtenerUsuarios();
+    if (usuariosRemotos && usuariosRemotos.length > 0) {
+        PERFILES_SEMILLA = usuariosRemotos.map(u => ({
+            id: u.id ?? u.Id,
+            nombre: u.nombre ?? u.Nombre,
+            email: u.email ?? u.Email,
+            saldoInicial: 0 // El saldo real se consulta dinámicamente de su billetera
+        }));
+        const usuarioEncontrado = usuarioActual ? PERFILES_SEMILLA.find(p => p.id === usuarioActual.id) : null;
+        usuarioActual = usuarioEncontrado || PERFILES_SEMILLA[1] || PERFILES_SEMILLA[0];
+    }
+
     await renderizarSelectorPerfilesSemilla();
     configurarEventosUI();
-    
+
     await cargarCategorias();
     await aplicarFiltros();
     await actualizarBilleteraUI();
@@ -80,7 +94,7 @@ async function renderizarSelectorPerfilesSemilla() {
         const saldoDisp = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? p.saldoInicial) : p.saldoInicial;
         const saldoRet = b ? (b.saldoRetenido ?? b.SaldoRetenido ?? 0) : 0;
         const esRamiro = p.email === 'ramiro.veloso@tester.com';
-        const esActivo = p.id === usuarioActual.id;
+        const esActivo = Boolean(usuarioActual && p.id === usuarioActual.id);
 
         dropdownMenu.innerHTML += `
             <li>
@@ -107,16 +121,21 @@ async function renderizarSelectorPerfilesSemilla() {
     dropdownMenu.innerHTML += `
         <li class="px-2 py-1">
             <button class="btn btn-success btn-sm w-100 fw-bold shadow-sm" onclick="cargarSaldoLibreRapido(100000)">
-                <i class="fa-solid fa-coins me-1"></i> Carga Libre +$100.000 a ${usuarioActual.nombre.split(' ')[0]}
+                <i class="fa-solid fa-coins me-1"></i> Carga Libre +$100.000 a ${usuarioActual ? usuarioActual.nombre.split(' ')[0] : 'Usuario'}
             </button>
         </li>
         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo"><i class="fa-solid fa-wallet me-2 text-primary-custom"></i>Consola Carga Libre de Saldo...</a></li>
         <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario"><i class="fa-solid fa-user-plus me-2 text-secondary"></i>Crear Nuevo Usuario</a></li>
     `;
 
-    // Sincronizar badge de saldo del usuario activo en el botón de la barra superior
-    const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
-    const saldoActualDisp = bActual ? (bActual.saldoDisponible ?? bActual.SaldoDisponible ?? usuarioActual.saldoInicial) : usuarioActual.saldoInicial;
+    // Sincronizar nombre de usuario y badge de saldo en el botón de la barra superior
+    const userInfo = document.getElementById('wallet-usuario-info');
+    if (userInfo && usuarioActual) {
+        userInfo.textContent = `${usuarioActual.nombre} (${usuarioActual.email})`;
+    }
+
+    const bActual = billeteras.find(b => b && usuarioActual && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
+    const saldoActualDisp = bActual ? (bActual.saldoDisponible ?? bActual.SaldoDisponible ?? (usuarioActual ? usuarioActual.saldoInicial : 0)) : (usuarioActual ? usuarioActual.saldoInicial : 0);
     const navBadge = document.getElementById('nav-user-saldo');
     if (navBadge) {
         navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
@@ -139,13 +158,15 @@ async function sincronizarSaldosDropdown() {
         });
 
         // Actualizar el saldo del usuario activo en la barra superior
-        const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
-        if (bActual) {
-            const saldoActualDisp = bActual.saldoDisponible ?? bActual.SaldoDisponible ?? 0;
-            const navBadge = document.getElementById('nav-user-saldo');
-            if (navBadge) {
-                navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
-                navBadge.className = `badge font-monospace ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
+        if (usuarioActual) {
+            const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
+            if (bActual) {
+                const saldoActualDisp = bActual.saldoDisponible ?? bActual.SaldoDisponible ?? 0;
+                const navBadge = document.getElementById('nav-user-saldo');
+                if (navBadge) {
+                    navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
+                    navBadge.className = `badge font-monospace ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
+                }
             }
         }
     } catch (err) {
@@ -156,7 +177,7 @@ async function sincronizarSaldosDropdown() {
 function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo, nuevoSaldoRetenido = 0) {
     const item = document.querySelector(`[data-dropdown-user-id="${usuarioId}"]`);
     if (item) {
-        const esActivo = (usuarioId === usuarioActual.id);
+        const esActivo = Boolean(usuarioActual && usuarioId === usuarioActual.id);
         const badgeUsuario = item.querySelector('.badge-saldo');
         if (badgeUsuario) {
             badgeUsuario.textContent = `$${nuevoSaldo.toLocaleString('es-AR')}`;
@@ -178,7 +199,7 @@ function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo, nuevoSaldoReten
         }
     }
 
-    if (usuarioId === usuarioActual.id) {
+    if (usuarioActual && usuarioId === usuarioActual.id) {
         const navBadge = document.getElementById('nav-user-saldo');
         if (navBadge) {
             navBadge.textContent = `$${nuevoSaldo.toLocaleString('es-AR')}`;
