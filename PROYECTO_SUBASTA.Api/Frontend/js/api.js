@@ -38,56 +38,90 @@ const MOCK_CATEGORIAS = [
 
 let MOCK_SUBASTAS = [
     {
-        id: 101,
-        titulo: 'Reloj de Lujo Smartwatch Pro',
-        descripcion: 'Reloj inteligente de edición limitada con caja de titanio, monitor cardíaco avanzado y resistencia al agua 50m.',
-        urlImagen: 'assets/images/watch.png',
-        precioBase: 150000,
+        id: 1,
+        titulo: 'Placa de Video RTX',
+        descripcion: 'GPU de alta gama para diseño y gaming',
+        urlImagen: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?w=500',
+        precioBase: 30000,
         incrementoMinimo: 5000,
-        fechaInicio: new Date(Date.now() - 3600000 * 2).toISOString(),
-        fechaFin: new Date(Date.now() + 120000).toISOString(), // Quedan 2 min (Zona crítica)
+        fechaInicio: new Date(Date.now() - 20 * 60000).toISOString(),
+        fechaFin: new Date(Date.now() + 25 * 60000).toISOString(), // Cierra en 20-30 min
         estado: 'ACTIVA',
         categoriaId: 1,
-        vendedorId: 3,
+        vendedorId: 1,
         ganadorId: null,
         precioFinal: null,
-        version: 4,
+        version: 3,
         pujas: [
-            { id: 1, subastaId: 101, usuarioId: 1, monto: 155000, fechaCreacion: new Date(Date.now() - 1800000).toISOString(), postorAnonimo: 'Postor #A83' },
-            { id: 2, subastaId: 101, usuarioId: 3, monto: 160000, fechaCreacion: new Date(Date.now() - 600000).toISOString(), postorAnonimo: 'Postor #K19' }
+            { id: 1, subastaId: 1, usuarioId: 3, monto: 35000, fechaCreacion: new Date(Date.now() - 15 * 60000).toISOString(), postorAnonimo: 'Postor #C7' },
+            { id: 2, subastaId: 1, usuarioId: 2, monto: 45000, fechaCreacion: new Date(Date.now() - 5 * 60000).toISOString(), postorAnonimo: 'Postor #A6' }
         ]
     },
     {
-        id: 102,
-        titulo: 'Cámara Fotográfica Vintage 1970',
-        descripcion: 'Cámara réflex clásica de colección en perfecto estado de funcionamiento, incluye estuche de cuero original.',
-        urlImagen: 'assets/images/camera.png',
-        precioBase: 85000,
-        incrementoMinimo: 2500,
-        fechaInicio: new Date(Date.now() - 3600000 * 24).toISOString(),
-        fechaFin: new Date(Date.now() + 3600000 * 5).toISOString(),
+        id: 2,
+        titulo: 'Procesador de Alta Gama',
+        descripcion: 'Ideal para estaciones de trabajo',
+        urlImagen: 'https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?w=500',
+        precioBase: 50000,
+        incrementoMinimo: 5000,
+        fechaInicio: new Date(Date.now() - 58 * 60000).toISOString(),
+        fechaFin: new Date(Date.now() + 90 * 1000).toISOString(), // Cierra en menos de 2 min (Zona crítica)
         estado: 'ACTIVA',
-        categoriaId: 2,
-        vendedorId: 3,
+        categoriaId: 1,
+        vendedorId: 1,
         ganadorId: null,
         precioFinal: null,
+        version: 1,
+        pujas: []
+    },
+    {
+        id: 3,
+        titulo: 'Figura Coleccionable Edición Limitada',
+        descripcion: 'Arte y diseño exclusivo',
+        urlImagen: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500',
+        precioBase: 15000,
+        incrementoMinimo: 2000,
+        fechaInicio: new Date(Date.now() + 24 * 3600000).toISOString(), // Inicio programado a +24 hs
+        fechaFin: new Date(Date.now() + 48 * 3600000).toISOString(),
+        estado: 'PROGRAMADA',
+        categoriaId: 2,
+        vendedorId: 1,
+        ganadorId: null,
+        precioFinal: null,
+        version: 1,
+        pujas: []
+    },
+    {
+        id: 4,
+        titulo: 'Campera de Cuero Vintage',
+        descripcion: 'Indumentaria clásica',
+        urlImagen: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500',
+        precioBase: 20000,
+        incrementoMinimo: 2000,
+        fechaInicio: new Date(Date.now() - 48 * 3600000).toISOString(),
+        fechaFin: new Date(Date.now() - 2 * 3600000).toISOString(), // Fecha de fin pasada (-2 hs)
+        estado: 'FINALIZADA',
+        categoriaId: 3,
+        vendedorId: 1,
+        ganadorId: 2,
+        precioFinal: 25000,
         version: 2,
         pujas: [
-            { id: 3, subastaId: 102, usuarioId: 1, monto: 90000, fechaCreacion: new Date(Date.now() - 3600000).toISOString(), postorAnonimo: 'Postor #A83' }
+            { id: 3, subastaId: 4, usuarioId: 2, monto: 25000, fechaCreacion: new Date(Date.now() - 24 * 3600000).toISOString(), postorAnonimo: 'Postor #A6' }
         ]
     },
     {
-        id: 103,
-        titulo: 'Auriculares Inalámbricos Hi-Fi',
-        descripcion: 'Cancelación de ruido activa de última generación con 40 horas de autonomía y códec de audio de alta resolución.',
-        urlImagen: 'assets/images/headphones.png',
-        precioBase: 45000,
-        incrementoMinimo: 1500,
-        fechaInicio: new Date(Date.now() + 3600000 * 12).toISOString(),
-        fechaFin: new Date(Date.now() + 3600000 * 36).toISOString(),
-        estado: 'PROGRAMADA',
-        categoriaId: 1,
-        vendedorId: 3,
+        id: 5,
+        titulo: 'Repuesto Clásico de Vehículo',
+        descripcion: 'Sin ofertas registradas',
+        urlImagen: 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500',
+        precioBase: 80000,
+        incrementoMinimo: 10000,
+        fechaInicio: new Date(Date.now() - 72 * 3600000).toISOString(),
+        fechaFin: new Date(Date.now() - 24 * 3600000).toISOString(), // Fecha pasada sin pujas (-24 hs)
+        estado: 'DESIERTA',
+        categoriaId: 4,
+        vendedorId: 1,
         ganadorId: null,
         precioFinal: null,
         version: 1,
@@ -96,47 +130,49 @@ let MOCK_SUBASTAS = [
 ];
 
 let MOCK_BILLETERAS = {
-    100: {
-        id: 100,
-        usuarioId: 100, // Ramiro Veloso Tester
-        saldoTotal: 500000,
-        saldoRetenido: 0,
-        saldoDisponible: 500000,
-        version: 1,
-        movimientos: [
-            { id: 1, billeteraId: 100, tipo: 0, monto: 500000, fecha: new Date(Date.now() - 3600000).toISOString(), subastaId: null, concepto: 'Fondo Inicial Tester Acreditado' }
-        ]
-    },
     1: {
         id: 1,
-        usuarioId: 1,
-        saldoTotal: 250000,
-        saldoRetenido: 40000,
-        saldoDisponible: 210000,
-        version: 1,
-        movimientos: [
-            { id: 10, billeteraId: 1, tipo: 0, monto: 250000, fecha: new Date(Date.now() - 86400000 * 2).toISOString(), subastaId: null, concepto: 'Depósito Inicial Acreditado' },
-            { id: 11, billeteraId: 1, tipo: 1, monto: 40000, fecha: new Date(Date.now() - 3600000).toISOString(), subastaId: 101, concepto: 'Retención en Garantía (Escrow) - Puja Subasta #101' }
-        ]
-    },
-    2: {
-        id: 2,
-        usuarioId: 2, // sinfondos@test.com
+        usuarioId: 1, // vendedor@test.com
         saldoTotal: 0,
         saldoRetenido: 0,
         saldoDisponible: 0,
         version: 1,
         movimientos: []
     },
-    3: {
-        id: 3,
-        usuarioId: 3, // vendedor@test.com
-        saldoTotal: 500000,
-        saldoRetenido: 0,
-        saldoDisponible: 500000,
+    2: {
+        id: 2,
+        usuarioId: 2, // comprador1@test.com (Comprador Líder)
+        saldoTotal: 150000,
+        saldoRetenido: 45000,
+        saldoDisponible: 105000,
         version: 1,
         movimientos: [
-            { id: 12, billeteraId: 3, tipo: 0, monto: 500000, fecha: new Date(Date.now() - 86400000 * 5).toISOString(), subastaId: null, concepto: 'Fondo Vendedor Registrado' }
+            { id: 2, billeteraId: 2, tipo: 1, monto: 45000, fecha: new Date(Date.now() - 5 * 60000).toISOString(), subastaId: 1, concepto: 'Retención en Garantía (Escrow) - Subasta #1' },
+            { id: 1, billeteraId: 2, tipo: 0, monto: 150000, fecha: new Date(Date.now() - 86400000).toISOString(), subastaId: null, concepto: 'Depósito Inicial Acreditado' }
+        ]
+    },
+    3: {
+        id: 3,
+        usuarioId: 3, // comprador2@test.com (Comprador Habilitado)
+        saldoTotal: 200000,
+        saldoRetenido: 0,
+        saldoDisponible: 200000,
+        version: 1,
+        movimientos: [
+            { id: 5, billeteraId: 3, tipo: 2, monto: 35000, fecha: new Date(Date.now() - 5 * 60000).toISOString(), subastaId: 1, concepto: 'Liberación de Garantía (Escrow) por Superación de Oferta - Subasta #1' },
+            { id: 4, billeteraId: 3, tipo: 1, monto: 35000, fecha: new Date(Date.now() - 15 * 60000).toISOString(), subastaId: 1, concepto: 'Retención en Garantía (Escrow) - Subasta #1' },
+            { id: 3, billeteraId: 3, tipo: 0, monto: 200000, fecha: new Date(Date.now() - 86400000).toISOString(), subastaId: null, concepto: 'Depósito Inicial Acreditado' }
+        ]
+    },
+    4: {
+        id: 4,
+        usuarioId: 4, // sinfondos@test.com (Usuario Sin Fondos)
+        saldoTotal: 500,
+        saldoRetenido: 0,
+        saldoDisponible: 500,
+        version: 1,
+        movimientos: [
+            { id: 6, billeteraId: 4, tipo: 0, monto: 500, fecha: new Date(Date.now() - 86400000).toISOString(), subastaId: null, concepto: 'Depósito Inicial Acreditado' }
         ]
     }
 };
@@ -185,7 +221,7 @@ function updateApiConnectionStatus(connected) {
             badge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> API Conectada (https://localhost:65102)';
         } else {
             badge.className = 'api-status-badge badge bg-warning text-dark';
-            badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Modo Simulación Local (Ramiro Veloso Tester Active)';
+            badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Modo Simulación Local';
         }
     }
 }
@@ -216,7 +252,7 @@ async function fetchCrearSubasta(subastaData) {
         if (e.status === 400 || e.status === 422) throw e;
         
         const nuevaSubasta = {
-            id: MOCK_SUBASTAS.length + 101,
+            id: MOCK_SUBASTAS.length + 1,
             ...subastaData,
             version: 1,
             pujas: []
@@ -313,9 +349,9 @@ async function fetchObtenerBilletera(usuarioId) {
             MOCK_BILLETERAS[usuarioId] = {
                 id: usuarioId,
                 usuarioId: usuarioId,
-                saldoTotal: 100000,
+                saldoTotal: 0,
                 saldoRetenido: 0,
-                saldoDisponible: 100000,
+                saldoDisponible: 0,
                 version: 1,
                 movimientos: []
             };
