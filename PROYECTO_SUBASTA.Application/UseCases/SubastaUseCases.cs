@@ -20,12 +20,28 @@ namespace PROYECTO_SUBASTA.Application.UseCases
 
         public async Task<IEnumerable<Subasta>> ObtenerActivasAsync()
         {
-            return await _subastaRepository.ObtenerActivasAsync();
+            var subastas = (await _subastaRepository.ObtenerActivasAsync()).ToList();
+            bool huboCambios = false;
+            foreach (var s in subastas)
+            {
+                if (SincronizarEstado(s))
+                {
+                    huboCambios = true;
+                }
+            }
+
+            if (huboCambios)
+            {
+                await _subastaRepository.GuardarCambiosAsync();
+            }
+
+            return subastas;
         }
-        // Recupera el catálogo de subastas activas de forma paginada para optimizar recursos, de forma paginada
+
+        // Recupera el catálogo de subastas de forma paginada para optimizar recursos
         public async Task<IEnumerable<Subasta>> ObtenerActivasPaginadasAsync(int pageNumber, int pageSize)
         {
-            var subastasActivas = await _subastaRepository.ObtenerActivasAsync();
+            var subastasActivas = await ObtenerActivasAsync();
 
             return subastasActivas
                 .Skip((pageNumber - 1) * pageSize)
@@ -34,12 +50,29 @@ namespace PROYECTO_SUBASTA.Application.UseCases
 
         public async Task<Subasta?> ObtenerPorIdAsync(int id)
         {
-            return await _subastaRepository.ObtenerPorIdAsync(id);
+            var subasta = await _subastaRepository.ObtenerPorIdAsync(id);
+            if (subasta != null)
+            {
+                if (SincronizarEstado(subasta))
+                {
+                    await _subastaRepository.GuardarCambiosAsync();
+                }
+            }
+            return subasta;
         }
 
         // Firma requerida por los controladores
         public async Task<Subasta> CrearAsync(Subasta subasta)
         {
+            // Garantizar que las fechas se guarden en UTC en la Base de Datos
+            subasta.FechaInicio = subasta.FechaInicio.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(subasta.FechaInicio, DateTimeKind.Utc)
+                : subasta.FechaInicio.ToUniversalTime();
+
+            subasta.FechaFin = subasta.FechaFin.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(subasta.FechaFin, DateTimeKind.Utc)
+                : subasta.FechaFin.ToUniversalTime();
+
             if (subasta.PrecioBase <= 0)
             {
                 throw new ArgumentException("El precio base de la subasta debe ser mayor a cero.");
@@ -54,6 +87,23 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             {
                 throw new ArgumentException("La fecha de inicio debe ser anterior a la de finalización.");
             }
+
+            // Sincronizar estado inicial: si la fecha de inicio es futura, nace como PROGRAMADA
+            var ahoraUtc = DateTime.UtcNow;
+            if (subasta.FechaInicio > ahoraUtc)
+            {
+                subasta.Estado = "PROGRAMADA";
+            }
+            else if (subasta.FechaFin <= ahoraUtc)
+            {
+                subasta.Estado = (subasta.Pujas != null && subasta.Pujas.Any()) ? "FINALIZADA" : "DESIERTA";
+            }
+            else
+            {
+                subasta.Estado = "ACTIVA";
+            }
+
+            if (subasta.Version == 0) subasta.Version = 1;
 
             await _subastaRepository.CrearAsync(subasta);
             await _subastaRepository.GuardarCambiosAsync();
@@ -78,7 +128,6 @@ namespace PROYECTO_SUBASTA.Application.UseCases
                 IncrementoMinimo = dto.IncrementoMinimo,
                 FechaInicio = dto.FechaInicio,
                 FechaFin = dto.FechaFin,
-                Estado = "ACTIVA",
                 CategoriaId = dto.CategoriaId,
                 VendedorId = dto.VendedorId,
                 Version = 1
@@ -87,7 +136,39 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             return await CrearAsync(subasta);
         }
 
-        public async Task RegistrarPujaAsync(int subastaId, int usuarioId, decimal montoPuja, int versionCliente)
+        private static bool SincronizarEstado(Subasta subasta)
+        {
+            var ahoraUtc = DateTime.UtcNow;
+            var estadoPrevio = subasta.Estado;
+
+            if (subasta.FechaFin <= ahoraUtc)
+            {
+                var tienePujas = subasta.Pujas != null && subasta.Pujas.Any();
+                subasta.Estado = tienePujas ? "FINALIZADA" : "DESIERTA";
+
+                if (subasta.Estado == "FINALIZADA" && subasta.GanadorId == null && tienePujas)
+                {
+                    var mejorPuja = subasta.Pujas!.OrderByDescending(p => p.Monto).First();
+                    subasta.GanadorId = mejorPuja.UsuarioId;
+                    subasta.PrecioFinal = mejorPuja.Monto;
+                }
+            }
+            else if (subasta.FechaInicio <= ahoraUtc && subasta.FechaFin > ahoraUtc)
+            {
+                if (subasta.Estado == "PROGRAMADA" || string.IsNullOrWhiteSpace(subasta.Estado))
+                {
+                    subasta.Estado = "ACTIVA";
+                }
+            }
+            else if (subasta.FechaInicio > ahoraUtc)
+            {
+                subasta.Estado = "PROGRAMADA";
+            }
+
+            return subasta.Estado != estadoPrevio;
+        }
+
+        public async Task<(Subasta Subasta, Puja Puja, uint SubastaVersion)> RegistrarPujaAsync(int subastaId, int usuarioId, decimal montoPuja, int versionCliente)
         {
             var subasta = await _subastaRepository.ObtenerPorIdAsync(subastaId);
             if (subasta == null)
@@ -134,6 +215,8 @@ namespace PROYECTO_SUBASTA.Application.UseCases
                 subasta.Version += 1;
                 await _subastaRepository.GuardarCambiosAsync();
             }
+
+            return (subasta, nuevaPuja, subasta.Version);
         }
     }
 }

@@ -31,7 +31,7 @@
                     <i class="fa-solid fa-gavel text-warning me-2"></i>SubastaYa
                 </span>
                 <span class="badge bg-white text-dark small font-monospace d-none d-md-inline-block opacity-75">
-                    Panel de Control &bull; Clean Architecture
+                    Panel de Control &bull; Hora Oficial UTC-3 (Argentina)
                 </span>
             </div>
             
@@ -220,12 +220,14 @@
 
                                         <div class="row g-3 mb-4">
                                             <div class="col-md-6">
-                                                <label class="form-label fw-semibold">Fecha y Hora de Inicio <span class="text-danger">*</span></label>
+                                                <label class="form-label fw-semibold">Fecha y Hora de Inicio (UTC-3) <span class="text-danger">*</span></label>
                                                 <input type="datetime-local" id="crear-fechaInicio" class="form-control" required>
+                                                <div class="form-text extra-small text-muted">Huso horario Argentina (UTC-3). Se guardará en UTC.</div>
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label fw-semibold">Fecha y Hora de Cierre <span class="text-danger">*</span></label>
+                                                <label class="form-label fw-semibold">Fecha y Hora de Cierre (UTC-3) <span class="text-danger">*</span></label>
                                                 <input type="datetime-local" id="crear-fechaFin" class="form-control" required>
+                                                <div class="form-text extra-small text-muted">Huso horario Argentina (UTC-3). Se guardará en UTC.</div>
                                             </div>
                                         </div>
 
@@ -452,7 +454,7 @@
                                             <tr>
                                                 <th>Tipo Transacción</th>
                                                 <th>Monto ($ ARS)</th>
-                                                <th>Fecha / Hora</th>
+                                                <th>Fecha / Hora (UTC-3)</th>
                                                 <th>Concepto / Subasta</th>
                                                 <th>Estado Contable</th>
                                             </tr>

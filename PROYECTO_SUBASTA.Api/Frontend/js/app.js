@@ -13,6 +13,140 @@ let timerCardsInterval = null;
 let contadorSyncInterval = 0;
 
 /* ==========================================================================
+   CONFIGURACIÓN DE HUSOS HORARIOS (UTC EN BASE DE DATOS / UTC-3 EN FRONTEND)
+   ========================================================================== */
+const TIMEZONE_UTC3 = 'America/Argentina/Buenos_Aires';
+
+/**
+ * Parsea de manera determinista cualquier fecha garantizando que se interprete en UTC.
+ * Si el string de la API no contiene 'Z' ni offset +/-XX:XX, le agrega 'Z'.
+ */
+function parseUtcDate(dateStr) {
+    if (!dateStr) return null;
+    if (dateStr instanceof Date) return dateStr;
+    let s = String(dateStr).trim();
+    if (!s.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(s)) {
+        s += 'Z';
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Formatea una fecha y hora en UTC-3 (Argentina): "DD/MM/AAAA, HH:mm:ss"
+ */
+function formatFechaHoraUTC3(dateInput) {
+    const d = parseUtcDate(dateInput);
+    if (!d) return '-';
+    return d.toLocaleString('es-AR', {
+        timeZone: TIMEZONE_UTC3,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+}
+
+/**
+ * Formatea una fecha y hora corta en UTC-3 (Argentina): "DD/MM/AAAA HH:mm"
+ */
+function formatFechaHoraCortaUTC3(dateInput) {
+    const d = parseUtcDate(dateInput);
+    if (!d) return '-';
+    return d.toLocaleString('es-AR', {
+        timeZone: TIMEZONE_UTC3,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+}
+
+/**
+ * Formatea únicamente la hora en UTC-3: "HH:mm:ss"
+ */
+function formatHoraUTC3(dateInput) {
+    const d = parseUtcDate(dateInput);
+    if (!d) return '-';
+    return d.toLocaleTimeString('es-AR', {
+        timeZone: TIMEZONE_UTC3,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+}
+
+/**
+ * Convierte un timestamp/Date a formato "YYYY-MM-DDTHH:mm" en UTC-3
+ * para ser consumido por un <input type="datetime-local">.
+ */
+function formatDatetimeLocalUTC3(dateInput) {
+    const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: TIMEZONE_UTC3,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(d);
+    const getPart = (type) => parts.find(p => p.type === type)?.value || '00';
+    const year = getPart('year');
+    const month = getPart('month');
+    const day = getPart('day');
+    let hour = getPart('hour');
+    if (hour === '24') hour = '00';
+    const minute = getPart('minute');
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+/**
+ * Convierte el valor local en UTC-3 de un <input type="datetime-local">
+ * a una cadena ISO UTC terminada en "Z" para almacenar en la Base de Datos.
+ */
+function utc3InputToIsoUtc(datetimeLocalVal) {
+    if (!datetimeLocalVal) return null;
+    const valConSegundos = datetimeLocalVal.length === 16 ? `${datetimeLocalVal}:00` : datetimeLocalVal;
+    const fechaUTC3 = new Date(`${valConSegundos}-03:00`);
+    return fechaUTC3.toISOString();
+}
+
+/**
+ * Determina el estado real y sincronizado de una subasta en tiempo real:
+ * - PROGRAMADA: Su fecha de inicio está en el futuro.
+ * - ACTIVA: Ya inició y aún no concluyó su fecha de fin.
+ * - FINALIZADA: Su fecha de fin ya expiró y tiene ofertas registradas.
+ * - DESIERTA: Su fecha de fin ya expiró y no tuvo ofertas.
+ */
+function determinarEstadoSubasta(sub) {
+    if (!sub) return 'DESIERTA';
+    const ahora = Date.now();
+    const inicioMs = parseUtcDate(sub.fechaInicio ?? sub.FechaInicio)?.getTime() || 0;
+    const finMs = parseUtcDate(sub.fechaFin ?? sub.FechaFin)?.getTime() || 0;
+    const estadoDb = (sub.estado ?? sub.Estado ?? '').toUpperCase();
+    const pujas = sub.pujas ?? sub.Pujas ?? [];
+    const tienePujas = pujas.length > 0;
+
+    if (finMs <= ahora || estadoDb === 'FINALIZADA' || estadoDb === 'DESIERTA') {
+        return (tienePujas || estadoDb === 'FINALIZADA') ? 'FINALIZADA' : 'DESIERTA';
+    }
+
+    if (inicioMs > ahora) {
+        return 'PROGRAMADA';
+    }
+
+    return 'ACTIVA';
+}
+
+/* ==========================================================================
    MODO OSCURO / CLARO (THEME CONTROLLER)
    ========================================================================== */
 
@@ -293,20 +427,35 @@ async function aplicarFiltros() {
         const ordenFiltro = document.getElementById('filtro-orden')?.value || 'tiempo';
 
         let subastasFiltradas = subastasCache.filter(sub => {
+            const estadoReal = determinarEstadoSubasta(sub);
             const coincideTexto = !textoFiltro || 
-                sub.titulo.toLowerCase().includes(textoFiltro) || 
+                (sub.titulo || '').toLowerCase().includes(textoFiltro) || 
                 (sub.descripcion && sub.descripcion.toLowerCase().includes(textoFiltro));
-            const coincideEstado = !estadoFiltro || sub.estado === estadoFiltro;
-            const coincideCategoria = !categoriaFiltro || sub.categoriaId == categoriaFiltro;
+            
+            let coincideEstado = true;
+            if (estadoFiltro) {
+                if (estadoFiltro === 'FINALIZADA') {
+                    coincideEstado = (estadoReal === 'FINALIZADA' || estadoReal === 'DESIERTA');
+                } else {
+                    coincideEstado = (estadoReal === estadoFiltro);
+                }
+            }
+
+            const subCatId = sub.categoriaId ?? sub.CategoriaId;
+            const coincideCategoria = !categoriaFiltro || subCatId == categoriaFiltro;
             return coincideTexto && coincideEstado && coincideCategoria;
         });
 
         if (ordenFiltro === 'tiempo') {
-            subastasFiltradas.sort((a, b) => new Date(a.fechaFin) - new Date(b.fechaFin));
+            subastasFiltradas.sort((a, b) => {
+                const finA = parseUtcDate(a.fechaFin ?? a.FechaFin)?.getTime() || 0;
+                const finB = parseUtcDate(b.fechaFin ?? b.FechaFin)?.getTime() || 0;
+                return finA - finB;
+            });
         } else if (ordenFiltro === 'puja') {
             subastasFiltradas.sort((a, b) => obtenerPujaMaxima(b) - obtenerPujaMaxima(a));
         } else if (ordenFiltro === 'precio') {
-            subastasFiltradas.sort((a, b) => a.precioBase - b.precioBase);
+            subastasFiltradas.sort((a, b) => (a.precioBase ?? a.PrecioBase ?? 0) - (b.precioBase ?? b.PrecioBase ?? 0));
         }
 
         grid.innerHTML = '';
@@ -328,32 +477,86 @@ async function aplicarFiltros() {
             const subCatId = sub.categoriaId ?? sub.CategoriaId;
             const categoria = categoriasCache.find(c => c.id == subCatId)?.nombre || 'General';
             const pujaActual = obtenerPujaMaxima(sub);
-            const subEstado = sub.estado ?? sub.Estado ?? 'ACTIVA';
+            const subEstado = determinarEstadoSubasta(sub);
             const badgeClass = getEstadoBadgeClass(subEstado);
             const imagenUrl = sub.urlImagen ?? sub.UrlImagen ?? 'assets/images/watch.png';
             const pujas = sub.pujas ?? sub.Pujas ?? [];
             const totalOfertas = pujas.length;
-            const ahora = Date.now();
-            const fechaFinStr = sub.fechaFin ?? sub.FechaFin;
-            const fechaFinMs = new Date(fechaFinStr).getTime();
-            const haFinalizado = (subEstado === 'FINALIZADA') || (fechaFinMs <= ahora);
             const subPrecioBase = sub.precioBase ?? sub.PrecioBase ?? 0;
+            const fechaInicioStr = sub.fechaInicio ?? sub.FechaInicio;
+            const fechaFinStr = sub.fechaFin ?? sub.FechaFin;
 
             // Determinar estado de liderazgo del usuario activo en esta subasta
-            const misPujasEnSub = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
+            const misPujasEnSub = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual?.id);
             let userBadgeHtml = '';
             if (misPujasEnSub.length > 0) {
                 const miMax = Math.max(...misPujasEnSub.map(p => (p.monto ?? p.Monto)));
                 const esLider = (miMax === pujaActual);
-                if (haFinalizado) {
+                if (subEstado === 'FINALIZADA') {
                     userBadgeHtml = esLider ? 
                         `<span class="badge bg-success shadow-sm extra-small"><i class="fa-solid fa-crown me-1"></i>¡Ganaste!</span>` : 
                         `<span class="badge bg-secondary shadow-sm extra-small">Finalizada</span>`;
+                } else if (subEstado === 'DESIERTA') {
+                    userBadgeHtml = `<span class="badge bg-dark shadow-sm extra-small">Desierta</span>`;
                 } else {
                     userBadgeHtml = esLider ? 
                         `<span class="badge bg-success-subtle text-success border border-success-subtle extra-small"><i class="fa-solid fa-crown me-1"></i>Vas ganando</span>` : 
                         `<span class="badge bg-danger-subtle text-danger border border-danger-subtle extra-small"><i class="fa-solid fa-triangle-exclamation me-1"></i>Te superaron</span>`;
                 }
+            }
+
+            let labelTiempo = 'Cierre:';
+            let badgeTimerHtml = '';
+            let btnText = 'Entrar a Sala en Vivo';
+            let btnIcon = 'fa-solid fa-gavel';
+            let btnClass = 'btn-primary-custom';
+
+            if (subEstado === 'PROGRAMADA') {
+                labelTiempo = 'Inicia:';
+                btnText = 'Ver Subasta Programada';
+                btnIcon = 'fa-regular fa-clock';
+                btnClass = 'btn-outline-warning text-dark';
+                badgeTimerHtml = `
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold card-timer" 
+                          data-subasta-id="${subId}" data-fecha-inicio="${fechaInicioStr}" data-fecha-fin="${fechaFinStr}"
+                          title="Inicia el ${formatFechaHoraCortaUTC3(fechaInicioStr)} (UTC-3)">
+                        Cargando inicio...
+                    </span>
+                `;
+            } else if (subEstado === 'ACTIVA') {
+                labelTiempo = 'Cierre:';
+                btnText = 'Entrar a Sala en Vivo';
+                btnIcon = 'fa-solid fa-gavel';
+                btnClass = 'btn-primary-custom';
+                badgeTimerHtml = `
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold card-timer" 
+                          data-subasta-id="${subId}" data-fecha-inicio="${fechaInicioStr}" data-fecha-fin="${fechaFinStr}"
+                          title="Cierre estimado: ${formatFechaHoraCortaUTC3(fechaFinStr)} (UTC-3)">
+                        Cargando...
+                    </span>
+                `;
+            } else if (subEstado === 'FINALIZADA') {
+                labelTiempo = 'Cerró (UTC-3):';
+                btnText = 'Ver Sala / Resultados';
+                btnIcon = 'fa-solid fa-flag-checkered';
+                btnClass = 'btn-secondary';
+                badgeTimerHtml = `
+                    <span class="badge bg-secondary text-white border fw-semibold card-timer" 
+                          data-subasta-id="${subId}" data-fecha-inicio="${fechaInicioStr}" data-fecha-fin="${fechaFinStr}">
+                        ${formatFechaHoraCortaUTC3(fechaFinStr)}
+                    </span>
+                `;
+            } else { // DESIERTA
+                labelTiempo = 'Cerró (UTC-3):';
+                btnText = 'Ver Sala / Sin Ofertas';
+                btnIcon = 'fa-solid fa-ban';
+                btnClass = 'btn-dark';
+                badgeTimerHtml = `
+                    <span class="badge bg-dark text-white border fw-semibold card-timer" 
+                          data-subasta-id="${subId}" data-fecha-inicio="${fechaInicioStr}" data-fecha-fin="${fechaFinStr}">
+                        DESIERTA (${formatFechaHoraCortaUTC3(fechaFinStr)})
+                    </span>
+                `;
             }
 
             const cardCol = document.createElement('div');
@@ -364,7 +567,7 @@ async function aplicarFiltros() {
                     <div class="card-img-wrapper">
                         <img src="${imagenUrl}" class="card-img-top" alt="${subTitulo}" onerror="this.src='assets/images/watch.png'">
                         <span class="badge-categoria"><i class="fa-solid fa-tag me-1"></i>${categoria}</span>
-                        <span class="badge badge-status ${haFinalizado ? 'bg-secondary' : badgeClass}">${haFinalizado ? 'FINALIZADA' : subEstado}</span>
+                        <span class="badge badge-status ${badgeClass}">${subEstado}</span>
                     </div>
                     <div class="card-body d-flex flex-column p-3">
                         <div class="d-flex justify-content-between align-items-start mb-1">
@@ -387,14 +590,12 @@ async function aplicarFiltros() {
                         </div>
 
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <span class="text-muted small"><i class="fa-regular fa-clock me-1"></i>Cierre:</span>
-                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold card-timer" data-fecha-fin="${fechaFinStr}" data-subasta-id="${subId}">
-                                Cargando...
-                            </span>
+                            <span class="text-muted small card-time-label"><i class="fa-regular fa-clock me-1"></i>${labelTiempo}</span>
+                            ${badgeTimerHtml}
                         </div>
 
-                        <button class="btn btn-primary-custom btn-sm w-100 mt-auto" onclick="abrirSalaEnVivo(${subId})">
-                            <i class="fa-solid fa-gavel me-1"></i> ${haFinalizado ? 'Ver Sala / Resultados' : 'Entrar a Sala en Vivo'}
+                        <button class="btn ${btnClass} btn-sm w-100 mt-auto card-action-btn" onclick="abrirSalaEnVivo(${subId})">
+                            <i class="${btnIcon} me-1"></i> ${btnText}
                         </button>
                     </div>
                 </div>
@@ -448,10 +649,9 @@ function actualizarTarjetaCatalogo(subastaId, nuevoMontoAnimar = null) {
     if (!sub || !cardCol) return;
 
     const pujaActual = obtenerPujaMaxima(sub);
-    const ahora = Date.now();
-    const fechaFinMs = new Date(sub.fechaFin ?? sub.FechaFin).getTime();
-    const subEstado = sub.estado ?? sub.Estado ?? 'ACTIVA';
-    const haFinalizado = (subEstado === 'FINALIZADA') || (fechaFinMs <= ahora);
+    const subEstado = determinarEstadoSubasta(sub);
+    const fechaInicioStr = sub.fechaInicio ?? sub.FechaInicio;
+    const fechaFinStr = sub.fechaFin ?? sub.FechaFin;
 
     // 1. Actualizar monto con animación de destello
     const montoElem = cardCol.querySelector('.card-puja-monto');
@@ -471,30 +671,69 @@ function actualizarTarjetaCatalogo(subastaId, nuevoMontoAnimar = null) {
         countElem.textContent = `${totalPujas} oferta${totalPujas === 1 ? '' : 's'}`;
     }
 
-    // 3. Actualizar badge de estado (ACTIVA / FINALIZADA)
+    // 3. Actualizar badge de estado (ACTIVA / PROGRAMADA / FINALIZADA / DESIERTA)
     const badgeStatus = cardCol.querySelector('.badge-status');
     if (badgeStatus) {
-        if (haFinalizado) {
-            badgeStatus.className = 'badge badge-status bg-secondary';
-            badgeStatus.textContent = 'FINALIZADA';
+        badgeStatus.className = `badge badge-status ${getEstadoBadgeClass(subEstado)}`;
+        badgeStatus.textContent = subEstado;
+    }
+
+    // 4. Actualizar botón de acción de la tarjeta
+    const actionBtn = cardCol.querySelector('.card-action-btn');
+    if (actionBtn) {
+        if (subEstado === 'PROGRAMADA') {
+            actionBtn.className = 'btn btn-outline-warning text-dark btn-sm w-100 mt-auto card-action-btn';
+            actionBtn.innerHTML = '<i class="fa-regular fa-clock me-1"></i> Ver Subasta Programada';
+        } else if (subEstado === 'ACTIVA') {
+            actionBtn.className = 'btn btn-primary-custom btn-sm w-100 mt-auto card-action-btn';
+            actionBtn.innerHTML = '<i class="fa-solid fa-gavel me-1"></i> Entrar a Sala en Vivo';
+        } else if (subEstado === 'FINALIZADA') {
+            actionBtn.className = 'btn btn-secondary btn-sm w-100 mt-auto card-action-btn';
+            actionBtn.innerHTML = '<i class="fa-solid fa-flag-checkered me-1"></i> Ver Sala / Resultados';
         } else {
-            badgeStatus.className = `badge badge-status ${getEstadoBadgeClass(subEstado)}`;
-            badgeStatus.textContent = subEstado;
+            actionBtn.className = 'btn btn-dark btn-sm w-100 mt-auto card-action-btn';
+            actionBtn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Ver Sala / Sin Ofertas';
         }
     }
 
-    // 4. Actualizar badge de liderazgo del usuario activo
+    // 5. Actualizar etiqueta y temporizador
+    const timeLabel = cardCol.querySelector('.card-time-label');
+    const timerElem = cardCol.querySelector('.card-timer');
+    if (timeLabel) {
+        if (subEstado === 'PROGRAMADA') {
+            timeLabel.innerHTML = '<i class="fa-regular fa-clock me-1"></i>Inicia:';
+        } else if (subEstado === 'ACTIVA') {
+            timeLabel.innerHTML = '<i class="fa-regular fa-clock me-1"></i>Cierre:';
+        } else {
+            timeLabel.innerHTML = '<i class="fa-solid fa-flag-checkered me-1"></i>Cerró (UTC-3):';
+        }
+    }
+    if (timerElem) {
+        timerElem.setAttribute('data-fecha-inicio', fechaInicioStr);
+        timerElem.setAttribute('data-fecha-fin', fechaFinStr);
+        if (subEstado === 'FINALIZADA') {
+            timerElem.className = 'badge bg-secondary text-white border fw-semibold card-timer';
+            timerElem.textContent = formatFechaHoraCortaUTC3(fechaFinStr);
+        } else if (subEstado === 'DESIERTA') {
+            timerElem.className = 'badge bg-dark text-white border fw-semibold card-timer';
+            timerElem.textContent = `DESIERTA (${formatFechaHoraCortaUTC3(fechaFinStr)})`;
+        }
+    }
+
+    // 6. Actualizar badge de liderazgo del usuario activo
     const leaderBadge = cardCol.querySelector('.card-user-leadership');
     if (leaderBadge) {
         const pujas = sub.pujas || sub.Pujas || [];
-        const misPujas = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
+        const misPujas = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual?.id);
         if (misPujas.length > 0) {
             const miMax = Math.max(...misPujas.map(p => (p.monto ?? p.Monto)));
             const esLider = (miMax === pujaActual);
-            if (haFinalizado) {
+            if (subEstado === 'FINALIZADA') {
                 leaderBadge.innerHTML = esLider ? 
                     `<span class="badge bg-success shadow-sm extra-small"><i class="fa-solid fa-crown me-1"></i>¡Ganaste!</span>` : 
                     `<span class="badge bg-secondary shadow-sm extra-small">Finalizada</span>`;
+            } else if (subEstado === 'DESIERTA') {
+                leaderBadge.innerHTML = `<span class="badge bg-dark shadow-sm extra-small">Desierta</span>`;
             } else {
                 leaderBadge.innerHTML = esLider ? 
                     `<span class="badge bg-success-subtle text-success border border-success-subtle extra-small"><i class="fa-solid fa-crown me-1"></i>Vas ganando</span>` : 
@@ -508,34 +747,55 @@ function actualizarTarjetaCatalogo(subastaId, nuevoMontoAnimar = null) {
 
 function actualizarTemporizadoresCatalogo() {
     const timers = document.querySelectorAll('.card-timer');
-    const ahora = new Date().getTime();
+    const ahora = Date.now();
 
     timers.forEach(t => {
-        const fechaFin = new Date(t.getAttribute('data-fecha-fin')).getTime();
         const subId = parseInt(t.getAttribute('data-subasta-id'));
-        const diff = fechaFin - ahora;
+        const sub = subastasCache.find(s => (s.id ?? s.Id) == subId);
+        if (!sub) return;
 
-        if (diff <= 0) {
-            t.innerHTML = 'FINALIZADA';
-            t.className = 'badge bg-secondary text-white border fw-semibold card-timer';
+        const estadoReal = determinarEstadoSubasta(sub);
+        const inicioMs = parseUtcDate(sub.fechaInicio ?? sub.FechaInicio)?.getTime() || 0;
+        const finMs = parseUtcDate(sub.fechaFin ?? sub.FechaFin)?.getTime() || 0;
+        const format = (n) => n.toString().padStart(2, '0');
 
-            if (subId) {
-                const cardCol = document.querySelector(`[data-subasta-card-id="${subId}"]`);
-                if (cardCol) {
-                    const badgeStatus = cardCol.querySelector('.badge-status');
-                    if (badgeStatus && badgeStatus.textContent !== 'FINALIZADA') {
-                        badgeStatus.className = 'badge badge-status bg-secondary';
-                        badgeStatus.textContent = 'FINALIZADA';
-                    }
-                }
+        if (estadoReal === 'PROGRAMADA') {
+            const diffInicio = inicioMs - ahora;
+            if (diffInicio <= 0) {
+                // La subasta acaba de iniciar: sincronizar tarjeta completa
+                actualizarTarjetaCatalogo(subId);
+            } else {
+                const horas = Math.floor(diffInicio / (1000 * 60 * 60));
+                const minutos = Math.floor((diffInicio % (1000 * 60 * 60)) / (1000 * 60));
+                const segundos = Math.floor((diffInicio % (1000 * 60)) / 1000);
+                t.innerHTML = `Inicia en: ${format(horas)}h ${format(minutos)}m ${format(segundos)}s`;
+                t.className = 'badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold card-timer';
             }
-        } else {
-            const horas = Math.floor(diff / (1000 * 60 * 60));
-            const minutos = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const segundos = Math.floor((diff % (1000 * 60)) / 1000);
-            
-            const format = (n) => n.toString().padStart(2, '0');
-            t.innerHTML = `${format(horas)}h ${format(minutos)}m ${format(segundos)}s`;
+        } else if (estadoReal === 'ACTIVA') {
+            const diffFin = finMs - ahora;
+            if (diffFin <= 0) {
+                // La subasta acaba de concluir: sincronizar tarjeta completa
+                actualizarTarjetaCatalogo(subId);
+            } else {
+                const horas = Math.floor(diffFin / (1000 * 60 * 60));
+                const minutos = Math.floor((diffFin % (1000 * 60 * 60)) / (1000 * 60));
+                const segundos = Math.floor((diffFin % (1000 * 60)) / 1000);
+
+                if (diffFin <= 60000) {
+                    t.className = 'badge bg-danger text-white border border-danger fw-bold card-timer animate-pulse';
+                } else if (diffFin <= 300000) {
+                    t.className = 'badge bg-warning text-dark border border-warning fw-semibold card-timer';
+                } else {
+                    t.className = 'badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold card-timer';
+                }
+                t.innerHTML = `${format(horas)}h ${format(minutos)}m ${format(segundos)}s`;
+            }
+        } else if (estadoReal === 'FINALIZADA') {
+            t.innerHTML = formatFechaHoraCortaUTC3(sub.fechaFin ?? sub.FechaFin);
+            t.className = 'badge bg-secondary text-white border fw-semibold card-timer';
+        } else { // DESIERTA
+            t.innerHTML = 'DESIERTA';
+            t.className = 'badge bg-dark text-white border fw-semibold card-timer';
         }
     });
 
@@ -552,19 +812,14 @@ function actualizarTemporizadoresCatalogo() {
    ========================================================================== */
 
 function inicializarFechasFormulario() {
-    const ahora = new Date();
-    const despues = new Date(ahora.getTime() + 24 * 60 * 60 * 1000);
-
-    const formatISO = (d) => {
-        const tzOffset = d.getTimezoneOffset() * 60000;
-        return (new Date(d - tzOffset)).toISOString().slice(0, 16);
-    };
+    const ahora = Date.now();
+    const despues = ahora + 24 * 60 * 60 * 1000;
 
     const inputInicio = document.getElementById('crear-fechaInicio');
     const inputFin = document.getElementById('crear-fechaFin');
 
-    if (inputInicio) inputInicio.value = formatISO(ahora);
-    if (inputFin) inputFin.value = formatISO(despues);
+    if (inputInicio) inputInicio.value = formatDatetimeLocalUTC3(ahora);
+    if (inputFin) inputFin.value = formatDatetimeLocalUTC3(despues);
 }
 
 async function guardarSubasta(event) {
@@ -576,8 +831,8 @@ async function guardarSubasta(event) {
     const urlImagen = document.getElementById('crear-urlImagen').value.trim();
     const precioBase = parseFloat(document.getElementById('crear-precioBase').value);
     const incrementoMinimo = parseFloat(document.getElementById('crear-incrementoMinimo').value);
-    const fechaInicio = document.getElementById('crear-fechaInicio').value;
-    const fechaFin = document.getElementById('crear-fechaFin').value;
+    const fechaInicioVal = document.getElementById('crear-fechaInicio').value;
+    const fechaFinVal = document.getElementById('crear-fechaFin').value;
 
     if (!titulo || !categoriaId) {
         mostrarToast('Complete el título y la categoría.', 'Campos Requeridos', 'warning');
@@ -594,7 +849,16 @@ async function guardarSubasta(event) {
         return;
     }
 
-    if (new Date(fechaInicio) >= new Date(fechaFin)) {
+    if (!fechaInicioVal || !fechaFinVal) {
+        mostrarToast('Complete las fechas de inicio y cierre.', 'Campos Requeridos', 'warning');
+        return;
+    }
+
+    // Convertir fecha de inicio y fin ingresadas en UTC-3 hacia formato ISO UTC estándar con "Z"
+    const fechaInicioIso = utc3InputToIsoUtc(fechaInicioVal);
+    const fechaFinIso = utc3InputToIsoUtc(fechaFinVal);
+
+    if (new Date(fechaInicioIso) >= new Date(fechaFinIso)) {
         mostrarToast('La fecha de inicio debe ser anterior a la fecha de finalización.', 'Error de Fechas', 'danger');
         return;
     }
@@ -603,22 +867,23 @@ async function guardarSubasta(event) {
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Publicando...';
 
+    const esProgramada = new Date(fechaInicioIso) > new Date();
     const nuevaSubastaDto = {
         titulo,
         descripcion,
         urlImagen: urlImagen || 'assets/images/watch.png',
         precioBase,
         incrementoMinimo,
-        fechaInicio: new Date(fechaInicio).toISOString(),
-        fechaFin: new Date(fechaFin).toISOString(),
-        estado: 'ACTIVA',
+        fechaInicio: fechaInicioIso,
+        fechaFin: fechaFinIso,
+        estado: esProgramada ? 'PROGRAMADA' : 'ACTIVA',
         categoriaId,
         vendedorId: usuarioActual.id
     };
 
     try {
         const creada = await fetchCrearSubasta(nuevaSubastaDto);
-        mostrarToast(`¡La subasta "${creada.titulo || titulo}" fue publicada con éxito!`, 'Publicación Exitosa', 'success');
+        mostrarToast(`¡La subasta "${creada.titulo || titulo}" fue publicada con éxito! Guardada en UTC.`, 'Publicación Exitosa', 'success');
 
         document.getElementById('form-crear-subasta').reset();
         inicializarFechasFormulario();
@@ -656,9 +921,10 @@ function actualizarSelectorSalaDirecto() {
     const select = document.getElementById('sala-subasta-selector');
     if (!select) return;
 
-    select.innerHTML = '<option value="">-- Seleccionar Subasta Activa --</option>';
+    select.innerHTML = '<option value="">-- Seleccionar Subasta --</option>';
     subastasCache.forEach(s => {
-        select.innerHTML += `<option value="${s.id}">${s.titulo} - ($${obtenerPujaMaxima(s).toLocaleString()})</option>`;
+        const est = determinarEstadoSubasta(s);
+        select.innerHTML += `<option value="${s.id}">[${est}] ${s.titulo} - ($${obtenerPujaMaxima(s).toLocaleString('es-AR')})</option>`;
     });
 
     if (subastaSeleccionadaSala) {
@@ -682,11 +948,25 @@ async function cargarSalaEnVivo(subastaId) {
         
         const catNombre = categoriasCache.find(c => c.id == subastaSeleccionadaSala.categoriaId)?.nombre || 'General';
         document.getElementById('sala-categoria-badge').textContent = catNombre;
-        document.getElementById('sala-estado-badge').textContent = subastaSeleccionadaSala.estado;
+
+        const estadoReal = determinarEstadoSubasta(subastaSeleccionadaSala);
+        const estadoBadge = document.getElementById('sala-estado-badge');
+        if (estadoBadge) {
+            estadoBadge.className = `badge ${getEstadoBadgeClass(estadoReal)}`;
+            if (estadoReal === 'PROGRAMADA') {
+                estadoBadge.textContent = `PROGRAMADA (Inicia: ${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaInicio)} UTC-3)`;
+            } else if (estadoReal === 'FINALIZADA') {
+                estadoBadge.textContent = `FINALIZADA (${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaFin)} UTC-3)`;
+            } else if (estadoReal === 'DESIERTA') {
+                estadoBadge.textContent = 'DESIERTA (Sin ofertas)';
+            } else {
+                estadoBadge.textContent = 'ACTIVA (En Vivo)';
+            }
+        }
+
         document.getElementById('sala-vendedor').textContent = `Vendedor ID: #${subastaSeleccionadaSala.vendedorId}`;
-        
-        document.getElementById('sala-precio-base').textContent = `$${subastaSeleccionadaSala.precioBase.toLocaleString()}`;
-        document.getElementById('sala-incremento-min').textContent = `$${subastaSeleccionadaSala.incrementoMinimo.toLocaleString()}`;
+        document.getElementById('sala-precio-base').textContent = `$${subastaSeleccionadaSala.precioBase.toLocaleString('es-AR')}`;
+        document.getElementById('sala-incremento-min').textContent = `$${subastaSeleccionadaSala.incrementoMinimo.toLocaleString('es-AR')}`;
 
         if (timerSalaInterval) clearInterval(timerSalaInterval);
         timerSalaInterval = setInterval(actualizarRelojSala, 1000);
@@ -709,24 +989,63 @@ function actualizarRelojSala() {
     const timerBox = document.getElementById('sala-timer-box');
     const timerElem = document.getElementById('sala-timer-digits');
     const antiSnipingBadge = document.getElementById('sala-antisniping-alert');
+    const btnPuja = document.getElementById('btn-realizar-puja');
     if (!timerElem) return;
 
-    const ahora = new Date().getTime();
-    const fechaFin = new Date(subastaSeleccionadaSala.fechaFin).getTime();
-    const diff = fechaFin - ahora;
+    const estadoReal = determinarEstadoSubasta(subastaSeleccionadaSala);
+    const ahora = Date.now();
+    const format = (n) => n.toString().padStart(2, '0');
 
-    if (diff <= 0) {
-        timerElem.textContent = "00:00:00 - FINALIZADA";
+    if (estadoReal === 'PROGRAMADA') {
+        const inicioMs = parseUtcDate(subastaSeleccionadaSala.fechaInicio).getTime();
+        const diffInicio = inicioMs - ahora;
+
+        if (diffInicio <= 0) {
+            // Acaba de iniciar: refrescar
+            cargarSalaEnVivo(subastaSeleccionadaSala.id);
+            return;
+        }
+
+        const hrs = Math.floor(diffInicio / (1000 * 60 * 60));
+        const mins = Math.floor((diffInicio % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diffInicio % (1000 * 60)) / 1000);
+
+        timerElem.textContent = `INICIA EN: ${format(hrs)}:${format(mins)}:${format(secs)}`;
+        if (timerBox) timerBox.className = 'timer-box bg-warning-subtle text-dark border-warning';
+        if (antiSnipingBadge) antiSnipingBadge.className = 'd-none';
+
+        if (btnPuja) {
+            btnPuja.disabled = true;
+            btnPuja.innerHTML = '<i class="fa-regular fa-clock me-2"></i> Subasta Programada (Ofertas bloqueadas hasta el inicio)';
+        }
+    } else if (estadoReal === 'FINALIZADA' || estadoReal === 'DESIERTA') {
+        timerElem.textContent = `00:00:00 - ${estadoReal}`;
         if (timerBox) timerBox.className = 'timer-box bg-secondary border-secondary';
         if (antiSnipingBadge) antiSnipingBadge.className = 'd-none';
-        document.getElementById('btn-realizar-puja').disabled = true;
-    } else {
+
+        if (btnPuja) {
+            btnPuja.disabled = true;
+            btnPuja.innerHTML = `<i class="fa-solid fa-flag-checkered me-2"></i> Subasta Concluida (${estadoReal})`;
+        }
+    } else { // ACTIVA
+        const finMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
+        const diff = finMs - ahora;
+
+        if (diff <= 0) {
+            // Acaba de finalizar: refrescar
+            cargarSalaEnVivo(subastaSeleccionadaSala.id);
+            return;
+        }
+
         const hrs = Math.floor(diff / (1000 * 60 * 60));
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const secs = Math.floor((diff % (1000 * 60)) / 1000);
-        const format = (n) => n.toString().padStart(2, '0');
         timerElem.textContent = `${format(hrs)}:${format(mins)}:${format(secs)}`;
-        document.getElementById('btn-realizar-puja').disabled = false;
+
+        if (btnPuja) {
+            btnPuja.disabled = false;
+            btnPuja.innerHTML = '<i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja';
+        }
 
         if (diff <= 60000) {
             if (timerBox) timerBox.className = 'timer-box timer-critical-alert';
@@ -844,7 +1163,7 @@ function actualizarMonitorPujasSala() {
         const esLider = index === 0;
         const esPropia = (p.usuarioId ?? p.UsuarioId) === usuarioActual.id;
         const pMonto = p.monto ?? p.Monto ?? 0;
-        const fechaFormat = new Date(p.fechaCreacion ?? p.FechaCreacion).toLocaleTimeString();
+        const fechaFormat = formatFechaHoraCortaUTC3(p.fechaCreacion ?? p.FechaCreacion);
         const pUid = p.usuarioId ?? p.UsuarioId;
         const anonHandle = p.postorAnonimo || `Postor #${(pUid * 33 + 100).toString(16).toUpperCase()}`;
 
@@ -874,9 +1193,20 @@ async function enviarPuja(event) {
 
     if (!subastaSeleccionadaSala) return;
 
+    // 1. Obtener la subasta fresca de la API para asegurar que la versión esté sincronizada
+    try {
+        const subastaFresca = await fetchObtenerSubastaPorId(subastaSeleccionadaSala.id);
+        subastaSeleccionadaSala.version = subastaFresca.version ?? subastaFresca.Version ?? 1;
+        subastaSeleccionadaSala.pujas = subastaFresca.pujas ?? subastaFresca.Pujas ?? [];
+    } catch (e) {
+        console.warn("No se pudo refrescar la subasta antes de pujar, usando versión local.", e);
+    }
+
     const montoInput = parseFloat(document.getElementById('input-monto-puja').value);
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
     const incrementoMin = subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000;
+
+    // ... (el resto de tus validaciones de monto e incremento siguen exactamente igual)
 
     if (isNaN(montoInput) || montoInput <= pujaActual) {
         mostrarToast(`La puja debe superar la oferta actual de $${pujaActual.toLocaleString('es-AR')}.`, 'Oferta Inválida', 'warning');
@@ -915,8 +1245,8 @@ async function enviarPuja(event) {
         const versionActual = subastaSeleccionadaSala.version || subastaSeleccionadaSala.Version || 1;
         const resPuja = await fetchRegistrarPuja(subastaSeleccionadaSala.id, usuarioActual.id, montoInput, versionActual);
 
-        const ahora = new Date().getTime();
-        const fechaFinMs = new Date(subastaSeleccionadaSala.fechaFin).getTime();
+        const ahora = Date.now();
+        const fechaFinMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
         let antiSnipingActivado = false;
 
         if ((fechaFinMs - ahora) <= 60000 && (fechaFinMs - ahora) > 0) {
@@ -1024,7 +1354,7 @@ async function actualizarBilleteraUI() {
 
         tbody.innerHTML = '';
         movimientos.forEach(m => {
-            const fechaStr = new Date(m.fecha).toLocaleString();
+            const fechaStr = formatFechaHoraUTC3(m.fecha);
             const tipoInfo = getTipoMovimientoInfo(m.tipo);
 
             const tr = document.createElement('tr');
@@ -1176,15 +1506,13 @@ async function cargarMisActividades() {
         const subTitulo = sub.titulo ?? sub.Titulo ?? `Subasta #${subId}`;
         const subImg = sub.urlImagen ?? sub.UrlImagen ?? 'assets/images/watch.png';
         const subPrecioBase = sub.precioBase ?? sub.PrecioBase ?? 0;
-        const subEstado = sub.estado ?? sub.Estado ?? 'ACTIVA';
+        const subEstado = determinarEstadoSubasta(sub);
         const subVendedorId = sub.vendedorId ?? sub.VendedorId;
         const pujas = sub.pujas ?? sub.Pujas ?? [];
         const catId = sub.categoriaId ?? sub.CategoriaId;
         const catNombre = categoriasCache.find(c => c.id == catId)?.nombre || 'General';
 
-        const ahora = Date.now();
-        const fechaFinMs = new Date(sub.fechaFin ?? sub.FechaFin).getTime();
-        const haFinalizado = (subEstado === 'FINALIZADA') || (fechaFinMs <= ahora);
+        const haFinalizado = (subEstado === 'FINALIZADA' || subEstado === 'DESIERTA');
         const pujaAbsolutaMax = obtenerPujaMaxima(sub);
 
         // 1. Subastas en las que el usuario actual ha realizado ofertas
@@ -1273,7 +1601,7 @@ async function cargarMisActividades() {
                         <div class="flex-grow-1 min-w-0">
                             <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
                                 <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
-                                <span class="badge ${haFinalizado ? 'bg-secondary' : 'bg-primary-custom'}">${haFinalizado ? 'FINALIZADA' : subEstado}</span>
+                                <span class="badge ${haFinalizado ? 'bg-secondary' : (subEstado === 'PROGRAMADA' ? 'bg-warning text-dark' : 'bg-primary-custom')}">${subEstado}</span>
                             </div>
                             <div class="extra-small text-muted mb-2">
                                 <span class="badge bg-light text-dark border me-1">${catNombre}</span>

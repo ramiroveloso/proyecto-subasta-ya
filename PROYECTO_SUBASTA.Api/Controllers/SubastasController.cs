@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.UseCases;
 using System.Threading.Tasks;
@@ -18,11 +18,39 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> ObtenerActivas([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 10)
+        public async Task<IActionResult> ObtenerActivas([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50)
         {
-            // Paginación aplicada para evitar sobrecargar la base de datos 
+            // Paginación aplicada para evitar sobrecargar la base de datos y mapeo a DTO para evitar ciclos de serialización
             var subastas = await _subastaUseCases.ObtenerActivasPaginadasAsync(pageNumber, pageSize);
-            return Ok(subastas);
+            var dtos = subastas.Select(subasta => new SubastaResponseDto
+            {
+                Id = subasta.Id,
+                Titulo = subasta.Titulo,
+                Descripcion = subasta.Descripcion,
+                UrlImagen = subasta.UrlImagen,
+                PrecioBase = subasta.PrecioBase,
+                IncrementoMinimo = subasta.IncrementoMinimo,
+                FechaInicio = subasta.FechaInicio,
+                FechaFin = subasta.FechaFin,
+                Estado = subasta.Estado,
+                CategoriaId = subasta.CategoriaId,
+                CategoriaNombre = subasta.Categoria?.Nombre ?? string.Empty,
+                VendedorId = subasta.VendedorId,
+                GanadorId = subasta.GanadorId,
+                PrecioFinal = subasta.PrecioFinal,
+                Version = subasta.Version,
+                Pujas = subasta.Pujas?.Select(p => new PujaItemDto
+                {
+                    Id = p.Id,
+                    SubastaId = p.SubastaId,
+                    UsuarioId = p.UsuarioId,
+                    Monto = p.Monto,
+                    FechaCreacion = p.FechaCreacion,
+                    PostorAnonimo = $"Postor #{(p.UsuarioId * 33 + 100):X}"
+                }).ToList() ?? new()
+            }).ToList();
+
+            return Ok(dtos);
         }
 
         [HttpGet("{id}")]
@@ -32,10 +60,38 @@ namespace PROYECTO_SUBASTA.Api.Controllers
 
             if (subasta == null)
             {
-                return NotFound($"No se encontró la subasta con el ID {id}.");
+                return NotFound(new { mensaje = $"No se encontró la subasta con el ID {id}." });
             }
 
-            return Ok(subasta);
+            // Mapeo limpio usando tu SubastaResponseDto existente
+            var responseDto = new SubastaResponseDto
+            {
+                Id = subasta.Id,
+                Titulo = subasta.Titulo,
+                Descripcion = subasta.Descripcion,
+                UrlImagen = subasta.UrlImagen,
+                PrecioBase = subasta.PrecioBase,
+                IncrementoMinimo = subasta.IncrementoMinimo,
+                FechaInicio = subasta.FechaInicio,
+                FechaFin = subasta.FechaFin,
+                Estado = subasta.Estado,
+                CategoriaId = subasta.CategoriaId,
+                VendedorId = subasta.VendedorId,
+                GanadorId = subasta.GanadorId,
+                PrecioFinal = subasta.PrecioFinal,
+                Version = subasta.Version, // ¡Vital para que viaje el token de concurrencia al frontend!
+                Pujas = subasta.Pujas?.Select(p => new PujaItemDto
+                {
+                    Id = p.Id,
+                    SubastaId = p.SubastaId,
+                    UsuarioId = p.UsuarioId,
+                    Monto = p.Monto,
+                    FechaCreacion = p.FechaCreacion,
+                    PostorAnonimo = $"Postor #{(p.UsuarioId * 33 + 100):X}"
+                }).ToList() ?? new()
+            };
+
+            return Ok(responseDto);
         }
 
         [HttpPost]
@@ -61,9 +117,22 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             }
 
             // Sin try-catch: Las excepciones de concurrencia (409) y negocio (400) fluyen limpiamente hacia el Middleware global.
-            await _subastaUseCases.RegistrarPujaAsync(id, dto.UsuarioId, dto.Monto, dto.Version);
+            var resultado = await _subastaUseCases.RegistrarPujaAsync(id, dto.UsuarioId, dto.Monto, dto.Version);
 
-            return Ok(new { mensaje = "Puja registrada con éxito y saldo retenido en Escrow." });
+            return Ok(new
+            {
+                mensaje = "Puja registrada con éxito y saldo retenido en Escrow.",
+                version = resultado.SubastaVersion,
+                puja = new PujaItemDto
+                {
+                    Id = resultado.Puja.Id,
+                    SubastaId = resultado.Puja.SubastaId,
+                    UsuarioId = resultado.Puja.UsuarioId,
+                    Monto = resultado.Puja.Monto,
+                    FechaCreacion = resultado.Puja.FechaCreacion,
+                    PostorAnonimo = $"Postor #{(resultado.Puja.UsuarioId * 33 + 100):X}"
+                }
+            });
         }
     }
 }

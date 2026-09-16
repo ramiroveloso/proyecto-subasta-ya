@@ -4,8 +4,8 @@ const url = 'https://localhost:65102/api/Subastas/1/pujas';
 
 const payload = {
     usuarioId: 1,
-    monto: 210000,
-    version: 8 // Asegúrate de que coincida con la versión actual en tu BD
+    monto: 85000,
+    version: 0 // Asegúrate de que coincida con la versión actual en tu BD
 };
 
 async function enviarPuja(id) {
