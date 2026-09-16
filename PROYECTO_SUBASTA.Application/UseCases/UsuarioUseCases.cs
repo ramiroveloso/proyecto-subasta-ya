@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Threading.Tasks;
-using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Application.DTOs;
+using PROYECTO_SUBASTA.Application.Exceptions;
 using PROYECTO_SUBASTA.Application.Repositories;
+using PROYECTO_SUBASTA.Domain.Entities;
 
 namespace PROYECTO_SUBASTA.Application.UseCases
 {
@@ -18,30 +20,49 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             _billeteraRepository = billeteraRepository;
         }
 
+        // Firma requerida por los controladores
         public async Task<Usuario> CrearUsuarioConBilleteraAsync(string nombre, string email)
         {
-            if (string.IsNullOrWhiteSpace(nombre))
+            var dto = new CrearUsuarioDto { Nombre = nombre, Email = email };
+            var response = await CrearUsuarioConBilleteraAsync(dto);
+
+            return new Usuario
             {
-                throw new ArgumentException("El nombre del usuario es obligatorio.");
+                Id = response.Id,
+                Nombre = response.Nombre,
+                Email = response.Email
+            };
+        }
+
+        // Firma desacoplada con DTO
+        public async Task<UsuarioResponseDto> CrearUsuarioConBilleteraAsync(CrearUsuarioDto dto)
+        {
+            if (dto == null)
+            {
+                throw new ReglaNegocioException("Los datos del usuario son obligatorios.");
             }
 
-            if (string.IsNullOrWhiteSpace(email))
+            if (string.IsNullOrWhiteSpace(dto.Nombre))
             {
-                throw new ArgumentException("El email del usuario es obligatorio.");
+                throw new ReglaNegocioException("El nombre del usuario es obligatorio.");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Email))
+            {
+                throw new ReglaNegocioException("El email del usuario es obligatorio.");
             }
 
             var usuario = new Usuario
             {
-                Nombre = nombre,
-                Email = email,
-                PasswordHash = "HASH_PRUEBA_123", // Pendiente integrar hashing real (BCrypt/Identity)
+                Nombre = dto.Nombre.Trim(),
+                Email = dto.Email.Trim(),
+                PasswordHash = "HASH_PRUEBA_123",
                 FechaRegistro = DateTime.UtcNow
             };
 
             await _usuarioRepository.AddAsync(usuario);
             await _usuarioRepository.SaveChangesAsync();
 
-            // Creación automática de la billetera asociada al usuario
             var billetera = new Billetera
             {
                 UsuarioId = usuario.Id,
@@ -54,7 +75,13 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             await _billeteraRepository.AddAsync(billetera);
             await _billeteraRepository.SaveChangesAsync();
 
-            return usuario;
+            return new UsuarioResponseDto
+            {
+                Id = usuario.Id,
+                Nombre = usuario.Nombre,
+                Email = usuario.Email,
+                FechaRegistro = usuario.FechaRegistro
+            };
         }
     }
 }
