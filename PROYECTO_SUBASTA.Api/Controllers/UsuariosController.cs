@@ -1,9 +1,6 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Application.UseCases;
-using System;
-using System.Threading.Tasks;
 
 namespace PROYECTO_SUBASTA.Api.Controllers
 {
@@ -22,15 +19,10 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> CrearUsuario([FromBody] CrearUsuarioDto dto)
         {
-            try
-            {
-                var usuario = await _usuarioUseCases.CrearUsuarioConBilleteraAsync(dto.Nombre, dto.Email);
-                return Ok(new { mensaje = "Usuario y billetera creados correctamente", usuarioId = usuario.Id });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            // Sin try-catch. Si ocurre una ArgumentException por reglas de negocio, 
+            // el middleware global la interceptará y responderá con un HTTP 400 Bad Request.
+            var usuario = await _usuarioUseCases.CrearUsuarioConBilleteraAsync(dto.Nombre, dto.Email);
+            return Ok(new { mensaje = "Usuario y billetera creados correctamente", usuarioId = usuario.Id });
         }
     }
 

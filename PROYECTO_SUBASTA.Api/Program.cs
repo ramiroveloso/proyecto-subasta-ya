@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using PROYECTO_SUBASTA.Domain.Entities;
-using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.API.Middlewares;
 using PROYECTO_SUBASTA.Application.Repositories;
+using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Infrastructure.Data;
 using PROYECTO_SUBASTA.Infrastructure.Repositories;
 
@@ -80,6 +81,10 @@ using (var scope = app.Services.CreateScope())
 // ========================================================================
 // 2. CONFIGURACIÓN DEL PIPELINE DE PETICIONES HTTP (MIDDLEWARES)
 // ========================================================================
+
+// 1. REGISTRAR EL MIDDLEWARE DE CONCURRENCIA AQUÍ (Al inicio del pipeline)
+app.UseMiddleware<ConcurrencyExceptionMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

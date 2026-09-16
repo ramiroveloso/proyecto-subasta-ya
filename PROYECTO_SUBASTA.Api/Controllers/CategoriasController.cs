@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Domain.Entities;
 using PROYECTO_SUBASTA.Application.UseCases;
-using System;
 using System.Threading.Tasks;
 
 namespace PROYECTO_SUBASTA.Api.Controllers
@@ -27,15 +26,10 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         [HttpPost]
         public async Task<IActionResult> Crear([FromBody] Categoria categoria)
         {
-            try
-            {
-                var nuevaCategoria = await _categoriaUseCases.CrearAsync(categoria);
-                return Ok(nuevaCategoria);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            // Sin try-catch. Si el dominio rechaza la categoría con ArgumentException, 
+            // el middleware global la atrapará y devolverá un 400 Bad Request automáticamente.
+            var nuevaCategoria = await _categoriaUseCases.CrearAsync(categoria);
+            return Ok(nuevaCategoria);
         }
     }
 }
