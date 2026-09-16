@@ -22,6 +22,15 @@ namespace PROYECTO_SUBASTA.Application.UseCases
         {
             return await _subastaRepository.ObtenerActivasAsync();
         }
+        // Recupera el catálogo de subastas activas de forma paginada para optimizar recursos, de forma paginada
+        public async Task<IEnumerable<Subasta>> ObtenerActivasPaginadasAsync(int pageNumber, int pageSize)
+        {
+            var subastasActivas = await _subastaRepository.ObtenerActivasAsync();
+
+            return subastasActivas
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize);
+        }
 
         public async Task<Subasta?> ObtenerPorIdAsync(int id)
         {

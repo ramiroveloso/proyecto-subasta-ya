@@ -6,13 +6,28 @@
 const API_BASE = 'https://localhost:65102/api';
 let isBackendConnected = true;
 
-// Perfiles Semilla del Sistema con Ramiro Veloso Tester como Perfil Principal
-const PERFILES_SEMILLA = [
-    { id: 100, nombre: 'Ramiro Veloso', email: 'ramiro.veloso@tester.com', rol: 'Usuario Tester Principal', saldoInicial: 500000 },
-    { id: 1, nombre: 'Juan Pérez', email: 'comprador1@test.com', rol: 'Comprador Activo', saldoInicial: 250000 },
-    { id: 2, nombre: 'Carlos SinFondos', email: 'sinfondos@test.com', rol: 'Comprador sin Fondos', saldoInicial: 0 },
-    { id: 3, nombre: 'Ana Vendedora', email: 'vendedor@test.com', rol: 'Vendedor Corporativo', saldoInicial: 500000 }
+
+// Perfiles del sistema: se cargan dinámicamente desde el backend o se usa el seed local como respaldo
+let PERFILES_SEMILLA = [
+    { id: 1, nombre: 'Vendedor Test', email: 'vendedor@test.com', saldoInicial: 0 },
+    { id: 2, nombre: 'Comprador Líder', email: 'comprador1@test.com', saldoInicial: 150000 },
+    { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com', saldoInicial: 200000 },
+    { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 }
 ];
+
+async function fetchObtenerUsuarios() {
+    try {
+        return await apiFetch('/Usuarios');
+    } catch (e) {
+        console.warn("No se pudieron cargar usuarios de la API, usando fallback local.", e);
+        return [
+            { id: 1, nombre: 'Vendedor Test', email: 'vendedor@test.com', saldoInicial: 0 },
+            { id: 2, nombre: 'Comprador Líder', email: 'comprador1@test.com', saldoInicial: 150000 },
+            { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com', saldoInicial: 200000 },
+            { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 }
+        ];
+    }
+}
 
 const MOCK_CATEGORIAS = [
     { id: 1, nombre: 'Tecnología' },

@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Application.UseCases;
 
@@ -23,6 +24,21 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             // el middleware global la interceptará y responderá con un HTTP 400 Bad Request.
             var usuario = await _usuarioUseCases.CrearUsuarioConBilleteraAsync(dto.Nombre, dto.Email);
             return Ok(new { mensaje = "Usuario y billetera creados correctamente", usuarioId = usuario.Id });
+        }
+
+        // GET: api/Usuarios
+        [HttpGet]
+        public async Task<IActionResult> ObtenerTodos()
+        {
+            var usuarios = await _usuarioUseCases.ObtenerTodosAsync();
+            var dtos = usuarios.Select(u => new
+            {
+                u.Id,
+                u.Nombre,
+                u.Email,
+                u.FechaRegistro
+            });
+            return Ok(dtos);
         }
     }
 
