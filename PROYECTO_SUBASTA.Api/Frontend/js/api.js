@@ -3,7 +3,9 @@
  * Endpoint Backend ASP.NET Core: https://localhost:65102/api
  */
 
-const API_BASE = 'https://localhost:65102/api';
+let API_BASE = (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http') && window.location.port)
+    ? `${window.location.origin}/api`
+    : 'https://localhost:65102/api';
 let isBackendConnected = true;
 
 
@@ -26,6 +28,40 @@ async function fetchObtenerUsuarios() {
             { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com', saldoInicial: 200000 },
             { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 }
         ];
+    }
+}
+
+async function fetchLogin(usuario, password) {
+    try {
+        const res = await apiFetch('/Usuarios/login', {
+            method: 'POST',
+            body: JSON.stringify({ usuario, password })
+        });
+        return res.usuario;
+    } catch (e) {
+        if (e.status === 400 || e.status === 401) {
+            throw e;
+        }
+        // Fallback simulación local
+        const userTrim = (usuario || '').toLowerCase().trim();
+        const perfiles = (typeof PERFILES_SEMILLA !== 'undefined' && PERFILES_SEMILLA.length > 0) ? PERFILES_SEMILLA : [
+            { id: 1, nombre: 'Vendedor Test', email: 'vendedor@test.com' },
+            { id: 2, nombre: 'Comprador Líder', email: 'comprador1@test.com' },
+            { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com' },
+            { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com' }
+        ];
+        const encontrado = perfiles.find(p => 
+            p.email.toLowerCase() === userTrim || 
+            p.nombre.toLowerCase() === userTrim
+        );
+        if (encontrado) {
+            return {
+                id: encontrado.id,
+                nombre: encontrado.nombre,
+                email: encontrado.email
+            };
+        }
+        throw { status: 401, message: 'Usuario o contraseña no reconocidos.' };
     }
 }
 
@@ -179,37 +215,60 @@ let MOCK_BILLETERAS = {
 
 async function apiFetch(endpoint, options = {}) {
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            ...options,
-            signal: controller.signal,
-            headers: {
-                'Content-Type': 'application/json',
-                ...(options.headers || {})
-            }
-        });
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            const errorObj = {
-                status: response.status,
-                message: await response.text() || `Error HTTP ${response.status}`
-            };
-            throw errorObj;
-        }
-        
-        updateApiConnectionStatus(true);
-        return await response.json();
+        return await executeFetch(API_BASE, endpoint, options);
     } catch (error) {
         if (error.status) {
             throw error;
+        }
+        // Fallback automático si HTTPS localhost falla por certificado autofirmado
+        if (API_BASE.startsWith('https://localhost:65102')) {
+            try {
+                const altBase = 'http://localhost:65103/api';
+                const res = await executeFetch(altBase, endpoint, options);
+                API_BASE = altBase;
+                return res;
+            } catch (_) {}
         }
         console.warn(`[SubastaYa API] No se pudo conectar a ${API_BASE}${endpoint}. Ejecutando en Modo Simulación Local.`, error);
         updateApiConnectionStatus(false);
         throw { status: 0, message: 'Backend fuera de línea (Modo Simulación Local)' };
     }
+}
+
+async function executeFetch(baseUrl, endpoint, options = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(options.headers || {})
+        }
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+        let errorText = '';
+        let errorJson = null;
+        try {
+            errorText = await response.text();
+            errorJson = JSON.parse(errorText);
+        } catch (_) {}
+
+        const errorObj = {
+            status: response.status,
+            message: (errorJson && (errorJson.mensaje || errorJson.message || errorJson.title)) 
+                ? (errorJson.mensaje || errorJson.message || errorJson.title)
+                : (errorText || `Error HTTP ${response.status}`),
+            details: errorJson
+        };
+        throw errorObj;
+    }
+    
+    updateApiConnectionStatus(true);
+    return await response.json();
 }
 
 function updateApiConnectionStatus(connected) {
@@ -447,3 +506,48 @@ async function fetchLiberarSaldo(usuarioId, monto, subastaId) {
         return { mensaje: 'Saldo liberado y reintegrado al disponible.' };
     }
 }
+
+let MOCK_AUDITORIA = [
+    {
+        id: 1,
+        usuarioId: 2,
+        accion: 'CAMBIO_ESTADO_SUBASTA',
+        detalle: "Subasta #4 ('Campera de Cuero Vintage') finalizada y adjudicada por Background Worker. Ganador: Usuario #2 (Comprador Líder) con oferta de $25.000,00.",
+        fechaRegistro: new Date(Date.now() - 2 * 3600000).toISOString()
+    },
+    {
+        id: 2,
+        usuarioId: 1,
+        accion: 'VENTA_REGISTRADA',
+        detalle: "Liquidación final de Subasta #4: Saldo retenido ($25.000,00) de Comprador Líder transferido a Billetera de Vendedor Test.",
+        fechaRegistro: new Date(Date.now() - 2 * 3600000).toISOString()
+    },
+    {
+        id: 3,
+        usuarioId: null,
+        accion: 'CAMBIO_ESTADO_SUBASTA',
+        detalle: "Subasta #5 ('Repuesto Clásico de Vehículo') declarada DESIERTA por el Background Worker al vencer el tiempo sin ofertas.",
+        fechaRegistro: new Date(Date.now() - 24 * 3600000).toISOString()
+    }
+];
+
+async function fetchObtenerAuditoria(limite = 100) {
+    try {
+        return await apiFetch(`/Auditoria?limite=${limite}`);
+    } catch (e) {
+        console.warn("No se pudieron cargar logs de auditoría de la API, usando fallback local.", e);
+        return MOCK_AUDITORIA || [];
+    }
+}
+
+async function fetchProcesarSubastasVencidas() {
+    try {
+        return await apiFetch('/Subastas/procesar-vencidas', {
+            method: 'POST'
+        });
+    } catch (e) {
+        console.warn("Error al invocar procesar-vencidas.", e);
+        return null;
+    }
+}
+

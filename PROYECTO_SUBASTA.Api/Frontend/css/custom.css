@@ -1,5 +1,5 @@
 /* ==========================================================================
-   SubastaYa - Estilos Corporativos Bordó & Dashboard Moderno
+   SubastaYa 
    ========================================================================== */
 
 :root {
@@ -99,6 +99,11 @@ body {
 .btn-gold:hover {
     background-color: var(--accent-gold-hover);
     color: #000000;
+}
+
+.bg-gold {
+    background-color: var(--accent-gold) !important;
+    color: #1a1a1a !important;
 }
 
 /* --- Header / Navbar --- */
@@ -591,6 +596,62 @@ body {
     color: #f8fafc;
 }
 
+/* ==========================================================================
+   ETIQUETAS / BADGES EN MODO OSCURO (TEXTO BLANCO SOBRE FONDO NARANJA)
+   Reemplaza texto blanco sobre amarillo por texto blanco sobre naranja para máxima legibilidad
+   ========================================================================== */
+[data-bs-theme="dark"] .badge.bg-warning,
+[data-bs-theme="dark"] .badge.bg-warning-subtle,
+[data-bs-theme="dark"] .badge.bg-gold,
+[data-bs-theme="dark"] .bg-gold,
+[data-bs-theme="dark"] .badge-status.bg-warning,
+[data-bs-theme="dark"] .badge-status.bg-warning-subtle,
+[data-bs-theme="dark"] .card-timer.bg-warning,
+[data-bs-theme="dark"] .card-timer.bg-warning-subtle,
+[data-bs-theme="dark"] .anti-sniping-badge.bg-warning,
+[data-bs-theme="dark"] .api-status-badge.bg-warning,
+[data-bs-theme="dark"] .toast-header.bg-warning,
+[data-bs-theme="dark"] span.badge[class*="bg-warning"] {
+    background-color: #c25e00 !important;
+    color: #ffffff !important;
+    border-color: #e65100 !important;
+}
+
+[data-bs-theme="dark"] .badge.bg-warning *,
+[data-bs-theme="dark"] .badge.bg-warning-subtle *,
+[data-bs-theme="dark"] .badge.bg-gold *,
+[data-bs-theme="dark"] .badge-status.bg-warning *,
+[data-bs-theme="dark"] .badge-status.bg-warning-subtle *,
+[data-bs-theme="dark"] .card-timer.bg-warning *,
+[data-bs-theme="dark"] .card-timer.bg-warning-subtle *,
+[data-bs-theme="dark"] .anti-sniping-badge.bg-warning *,
+[data-bs-theme="dark"] .api-status-badge.bg-warning * {
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .btn-warning {
+    background-color: #c25e00 !important;
+    border-color: #a04000 !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .btn-warning:hover {
+    background-color: #a04000 !important;
+    border-color: #803000 !important;
+    color: #ffffff !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-warning {
+    color: #ea580c !important;
+    border-color: #c25e00 !important;
+}
+
+[data-bs-theme="dark"] .btn-outline-warning:hover {
+    background-color: #c25e00 !important;
+    color: #ffffff !important;
+    border-color: #c25e00 !important;
+}
+
 /* Badges de saldo y retención en dropdown */
 .badge-saldo {
     font-size: 0.8rem;
@@ -631,6 +692,85 @@ body {
 
 [data-bs-theme="dark"] .activity-card .border {
     border-color: #273449 !important;
+}
+
+/* ==========================================================================
+   PANTALLA DE LOGIN MINIMALISTA
+   ========================================================================== */
+.login-overlay {
+    min-height: calc(100vh - 70px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 60%);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 440px;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08), 0 0 1px 1px rgba(0, 0, 0, 0.04) !important;
+    transition: all 0.3s ease;
+}
+
+.login-brand-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto;
+    border-radius: 50%;
+    background: rgba(217, 119, 6, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+[data-bs-theme="dark"] .login-card {
+    background: #151d2f !important;
+    border: 1px solid #243049 !important;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-bs-theme="dark"] .login-brand-icon {
+    background: rgba(217, 119, 6, 0.2);
+}
+
+[data-bs-theme="dark"] .login-overlay {
+    background: radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+}
+
+/* ==========================================================================
+   MENÚ DE CATEGORÍAS (PILLS)
+   ========================================================================== */
+.category-pill {
+    transition: all 0.2s ease;
+    cursor: pointer;
+    font-size: 0.82rem;
+    letter-spacing: 0.2px;
+}
+
+.category-pill:hover {
+    transform: translateY(-1px);
+}
+
+.category-pill.active {
+    background-color: var(--primary-color) !important;
+    color: #ffffff !important;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+[data-bs-theme="dark"] .category-pill:not(.active) {
+    background-color: #192231;
+    border-color: #273449;
+    color: #cbd5e1;
+}
+
+[data-bs-theme="dark"] .category-pill:not(.active):hover {
+    background-color: #243049;
+    color: #ffffff;
 }
 
 

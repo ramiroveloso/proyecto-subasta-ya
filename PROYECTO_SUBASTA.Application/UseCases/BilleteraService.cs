@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,14 +11,16 @@ namespace PROYECTO_SUBASTA.Application.UseCases
     {
         private readonly IBilleteraRepository _billeteraRepository;
         private readonly IRepository<TransactionLedger> _ledgerRepository;
+        private readonly IAuditoriaService _auditoriaService;
 
-        // Inyectamos las abstracciones de persistencia promoviendo el desacoplamiento de capas (Inversion of Control).
         public BilleteraService(
             IBilleteraRepository billeteraRepository,
-            IRepository<TransactionLedger> ledgerRepository)
+            IRepository<TransactionLedger> ledgerRepository,
+            IAuditoriaService auditoriaService)
         {
             _billeteraRepository = billeteraRepository;
             _ledgerRepository = ledgerRepository;
+            _auditoriaService = auditoriaService;
         }
 
         public async Task<Billetera?> ObtenerBilleteraPorUsuarioAsync(int usuarioId)
@@ -49,6 +51,14 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             await _ledgerRepository.AddAsync(transaccion);
 
             await _billeteraRepository.SaveChangesAsync();
+
+            // Auditoría obligatoria de acreditación manual de saldo
+            await _auditoriaService.RegistrarAsync(
+                "ACREDITACION_MANUAL_SALDO",
+                $"Acreditación manual de saldo de ${monto:N2} en la billetera de Usuario #{usuarioId}. Saldo total resultante: ${billetera.SaldoTotal:N2}.",
+                usuarioId
+            );
+
             return true;
         }
 
@@ -81,7 +91,11 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             }
             catch (InvalidOperationException)
             {
-                // Captura el fallo si el saldo disponible es insuficiente
+                await _auditoriaService.RegistrarAsync(
+                    "RETENCION_RECHAZADA",
+                    $"Intento de retención de garantía de ${monto:N2} para Subasta #{subastaId} rechazado: Saldo disponible insuficiente (${billetera.SaldoDisponible:N2}) en billetera de Usuario #{usuarioId}.",
+                    usuarioId
+                );
                 return false;
             }
         }
@@ -97,7 +111,7 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             billetera.LiberarSaldo(monto);
             _billeteraRepository.Update(billetera);
 
-            // Asentamos la contrapartida contable de liberación en la auditoría
+            // Asentamos la contrapartida contable de liberación en el ledger
             var transaccion = new TransactionLedger
             {
                 BilleteraId = billetera.Id,

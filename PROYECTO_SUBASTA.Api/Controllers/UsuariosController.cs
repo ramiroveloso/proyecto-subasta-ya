@@ -40,11 +40,49 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             });
             return Ok(dtos);
         }
+        // POST: api/Usuarios/login
+        [HttpPost("login")]
+        public async Task<IActionResult> IniciarSesion([FromBody] LoginDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Usuario))
+            {
+                return BadRequest(new { mensaje = "Debe ingresar un usuario o correo electrónico." });
+            }
+
+            var usuarios = await _usuarioUseCases.ObtenerTodosAsync();
+            var input = dto.Usuario.Trim();
+
+            var usuario = usuarios.FirstOrDefault(u =>
+                string.Equals(u.Email, input, System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(u.Nombre, input, System.StringComparison.OrdinalIgnoreCase));
+
+            if (usuario == null)
+            {
+                return Unauthorized(new { mensaje = "Credenciales incorrectas: usuario o correo no registrado." });
+            }
+
+            return Ok(new
+            {
+                mensaje = "Inicio de sesión exitoso.",
+                usuario = new
+                {
+                    id = usuario.Id,
+                    nombre = usuario.Nombre,
+                    email = usuario.Email
+                }
+            });
+        }
     }
 
     public class CrearUsuarioDto
     {
         public string Nombre { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+    }
+
+    public class LoginDto
+    {
+        public string Usuario { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
     }
 }
