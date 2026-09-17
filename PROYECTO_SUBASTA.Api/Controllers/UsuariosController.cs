@@ -16,16 +16,6 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             _usuarioUseCases = usuarioUseCases;
         }
 
-        // POST: api/Usuarios
-        [HttpPost]
-        public async Task<IActionResult> CrearUsuario([FromBody] CrearUsuarioDto dto)
-        {
-            // Sin try-catch. Si ocurre una ArgumentException por reglas de negocio, 
-            // el middleware global la interceptará y responderá con un HTTP 400 Bad Request.
-            var usuario = await _usuarioUseCases.CrearUsuarioConBilleteraAsync(dto.Nombre, dto.Email);
-            return Ok(new { mensaje = "Usuario y billetera creados correctamente", usuarioId = usuario.Id });
-        }
-
         // GET: api/Usuarios
         [HttpGet]
         public async Task<IActionResult> ObtenerTodos()
@@ -40,8 +30,43 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             });
             return Ok(dtos);
         }
-        // POST: api/Usuarios/login
-        [HttpPost("login")]
+
+        // GET: api/Usuarios/1
+        [HttpGet("{id}")]
+        public async Task<IActionResult> ObtenerPorId(int id)
+        {
+            var usuarios = await _usuarioUseCases.ObtenerTodosAsync();
+            var usuario = usuarios.FirstOrDefault(u => u.Id == id);
+            if (usuario == null)
+            {
+                return NotFound(new { mensaje = $"No se encontró el usuario con ID {id}." });
+            }
+
+            return Ok(new
+            {
+                usuario.Id,
+                usuario.Nombre,
+                usuario.Email,
+                usuario.FechaRegistro
+            });
+        }
+
+        // POST: api/Usuarios
+        [HttpPost]
+        public async Task<IActionResult> CrearUsuario([FromBody] CrearUsuarioDto dto)
+        {
+            // Sin try-catch. Si ocurre una ArgumentException por reglas de negocio, 
+            // el middleware global la interceptará y responderá con un HTTP 400 Bad Request.
+            var usuario = await _usuarioUseCases.CrearUsuarioConBilleteraAsync(dto.Nombre, dto.Email);
+            return CreatedAtAction(nameof(ObtenerPorId), new { id = usuario.Id }, new
+            {
+                mensaje = "Usuario y billetera creados correctamente",
+                usuarioId = usuario.Id
+            });
+        }
+
+        // POST: api/Usuarios/sesiones
+        [HttpPost("sesiones")]
         public async Task<IActionResult> IniciarSesion([FromBody] LoginDto dto)
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.Usuario))

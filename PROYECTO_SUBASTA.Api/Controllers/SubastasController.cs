@@ -138,8 +138,9 @@ namespace PROYECTO_SUBASTA.Api.Controllers
             });
         }
 
-        [HttpPost("procesar-vencidas")]
-        public async Task<IActionResult> ProcesarVencidas([FromServices] IAdjudicacionService adjudicacionService)
+        // POST: api/Subastas/cierres
+        [HttpPost("cierres")]
+        public async Task<IActionResult> ProcesarCierres([FromServices] IAdjudicacionService adjudicacionService)
         {
             var res = await adjudicacionService.ProcesarSubastasVencidasAsync();
             return Ok(new
