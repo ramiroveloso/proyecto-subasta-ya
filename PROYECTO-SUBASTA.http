@@ -1,6 +1,131 @@
-@PROYECTO_SUBASTA_HostAddress = http://localhost:5132
+@PROYECTO_SUBASTA_HostAddress = https://localhost:65102
 
-GET {{PROYECTO_SUBASTA_HostAddress}}/weatherforecast/
+### 1. SUBASTAS
+### Obtener subastas activas
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Subastas
+Accept: application/json
+
+### Obtener subasta por ID
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Subastas/1
+Accept: application/json
+
+### Crear subasta
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Subastas
+Content-Type: application/json
+
+{
+  "titulo": "Reloj Antiguo de Colección",
+  "descripcion": "Reloj de bolsillo suizo en perfecto funcionamiento",
+  "urlImagen": "https://images.unsplash.com/photo-1524805444758-089113d48a6d?w=500",
+  "precioBase": 15000.00,
+  "incrementoMinimo": 1000.00,
+  "fechaInicio": "2026-09-17T10:00:00Z",
+  "fechaFin": "2026-09-17T18:00:00Z",
+  "categoriaId": 2,
+  "vendedorId": 1
+}
+
+### Registrar puja en subasta (Subrecurso pujas)
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Subastas/1/pujas
+Content-Type: application/json
+
+{
+  "usuarioId": 2,
+  "monto": 26000.00,
+  "version": 1
+}
+
+### Procesar cierres de subastas vencidas (Recurso cierres)
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Subastas/cierres
 Accept: application/json
 
 ###
+### 2. BILLETERAS
+### Obtener billetera por ID de usuario
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Billeteras/2
+Accept: application/json
+
+### Obtener movimientos de billetera (Subrecurso movimientos)
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Billeteras/2/movimientos
+Accept: application/json
+
+### Cargar saldo en billetera (Crear movimiento DEPOSITO)
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Billeteras/2/movimientos
+Content-Type: application/json
+
+{
+  "monto": 50000.00,
+  "tipo": "DEPOSITO"
+}
+
+### Retener saldo de garantía Escrow (Crear movimiento RETENCION)
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Billeteras/2/movimientos
+Content-Type: application/json
+
+{
+  "monto": 15000.00,
+  "tipo": "RETENCION",
+  "subastaId": 1
+}
+
+### Liberar saldo de garantía Escrow (Crear movimiento LIBERACION)
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Billeteras/2/movimientos
+Content-Type: application/json
+
+{
+  "monto": 15000.00,
+  "tipo": "LIBERACION",
+  "subastaId": 1
+}
+
+###
+### 3. CATEGORIAS
+### Obtener categorías
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Categorias
+Accept: application/json
+
+### Obtener categoría por ID
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Categorias/1
+Accept: application/json
+
+### Crear categoría
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Categorias
+Content-Type: application/json
+
+{
+  "nombre": "Arte y Antigüedades"
+}
+
+###
+### 4. USUARIOS
+### Obtener todos los usuarios
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Usuarios
+Accept: application/json
+
+### Obtener usuario por ID
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Usuarios/1
+Accept: application/json
+
+### Crear usuario
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Usuarios
+Content-Type: application/json
+
+{
+  "nombre": "Nuevo Postor",
+  "email": "postor@test.com"
+}
+
+### Autenticación / Iniciar sesión (Recurso sesiones)
+POST {{PROYECTO_SUBASTA_HostAddress}}/api/Usuarios/sesiones
+Content-Type: application/json
+
+{
+  "usuario": "vendedor@test.com",
+  "password": ""
+}
+
+###
+### 5. AUDITORIAS
+### Obtener registros de auditoría
+GET {{PROYECTO_SUBASTA_HostAddress}}/api/Auditorias?limite=50
+Accept: application/json
