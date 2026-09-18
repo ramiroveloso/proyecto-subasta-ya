@@ -23,7 +23,135 @@
 </head>
 <body>
 
-    <!-- Navbar Superior Corporativo con Perfil Principal Tester Ramiro Veloso -->
+    <!-- =================================================================== -->
+    <!-- PANTALLA Y OVERLAY DE BIENVENIDA / LOGIN POR PERFIL -->
+    <!-- =================================================================== -->
+    <div id="login-overlay" class="login-backdrop-fullscreen d-none">
+        <div class="login-card-pro shadow-lg">
+            <div class="login-header">
+                <div class="login-header-icon">
+                    <i class="fa-solid fa-gavel text-warning"></i>
+                </div>
+                <h3 class="fw-bold mb-1">SubastaYa</h3>
+                <p class="small opacity-75 mb-0">Plataforma de Subastas en Tiempo Real &bull; Inicia sesión con tu perfil</p>
+            </div>
+            
+            <div class="p-4">
+                <!-- Nav tabs -->
+                <ul class="nav nav-pills nav-fill mb-4 p-1 bg-light rounded-3 border" id="login-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-semibold" id="tab-login-perfil" data-bs-toggle="pill" data-bs-target="#login-content-perfil" type="button" role="tab">
+                            <i class="fa-solid fa-users me-2"></i>Seleccionar Perfil
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-semibold" id="tab-login-credenciales" data-bs-toggle="pill" data-bs-target="#login-content-credenciales" type="button" role="tab">
+                            <i class="fa-solid fa-key me-2 text-warning"></i>Email / Contraseña
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="loginTabContent">
+                    <!-- Tab 1: Seleccionar Perfil con contraseña -->
+                    <div class="tab-pane fade show active" id="login-content-perfil" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span class="text-muted small fw-medium">Elige tu perfil e ingresa la contraseña para acceder:</span>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="cargarPerfilesEnLogin()" title="Recargar perfiles">
+                                <i class="fa-solid fa-rotate me-1"></i> Refrescar
+                            </button>
+                        </div>
+
+                        <!-- Alerta de error del login por perfil -->
+                        <div id="login-perfil-error" class="alert alert-danger d-none py-2 small mb-3">
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i> <span id="login-perfil-error-text"></span>
+                        </div>
+
+                        <div id="login-profiles-grid" class="row g-3">
+                            <!-- Renderizado dinámicamente desde JS -->
+                            <div class="col-12 text-center py-4">
+                                <div class="spinner-border text-primary-custom" role="status"></div>
+                                <div class="small text-muted mt-2">Cargando perfiles disponibles...</div>
+                            </div>
+                        </div>
+
+                        <!-- Formulario de contraseña para el perfil seleccionado -->
+                        <div id="login-perfil-password-box" class="d-none mt-3 p-3 rounded-3 border bg-light">
+                            <div class="d-flex align-items-center mb-2 gap-2">
+                                <div id="login-perfil-avatar-confirm" class="profile-avatar" style="width:36px;height:36px;font-size:0.85rem;">US</div>
+                                <div>
+                                    <div class="fw-bold text-dark small" id="login-perfil-nombre-confirm">Nombre</div>
+                                    <div class="extra-small text-muted" id="login-perfil-email-confirm">email</div>
+                                </div>
+                            </div>
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text bg-white"><i class="fa-solid fa-lock text-muted"></i></span>
+                                <input type="password" id="login-perfil-password" class="form-control" placeholder="Contraseña (1234)" autocomplete="current-password">
+                                <button class="btn btn-outline-secondary" type="button" id="btn-toggle-pw-perfil" onclick="togglePwVisibilityPerfil()"><i class="fa-solid fa-eye"></i></button>
+                            </div>
+                            <div class="form-text extra-small text-muted mb-2"><i class="fa-solid fa-circle-info me-1"></i>La contraseña de todos los perfiles de prueba es <strong>1234</strong>.</div>
+                            <div class="d-grid gap-1">
+                                <button type="button" id="btn-login-perfil-confirmar" class="btn btn-primary-custom btn-sm fw-semibold d-flex align-items-center justify-content-center" onclick="confirmarLoginPerfil()">
+                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner-login-perfil" role="status"></span>
+                                    <span id="text-login-perfil"><i class="fa-solid fa-arrow-right-to-bracket me-2"></i>Ingresar</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm extra-small" onclick="cancelarSeleccionPerfil()">
+                                    <i class="fa-solid fa-arrow-left me-1"></i> Cambiar perfil
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Login con Email y Contraseña -->
+                    <div class="tab-pane fade" id="login-content-credenciales" role="tabpanel">
+                        <form id="form-login-credenciales" class="p-2">
+                            <div id="login-error-alert" class="alert alert-danger d-none py-2 small mb-3">
+                                <i class="fa-solid fa-triangle-exclamation me-1"></i> <span id="login-error-text"></span>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-secondary">Usuario o Correo Electrónico</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white"><i class="fa-solid fa-envelope text-muted"></i></span>
+                                    <input type="text" id="login-input-usuario" class="form-control" placeholder="Ej: comprador1@test.com" required>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-secondary">Contraseña</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white"><i class="fa-solid fa-lock text-muted"></i></span>
+                                    <input type="password" id="login-input-password" class="form-control" placeholder="Contraseña (1234 para cuentas de prueba)" required>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePwVisibilityCredenciales()"><i class="fa-solid fa-eye"></i></button>
+                                </div>
+                                <div class="form-text extra-small text-muted"><i class="fa-solid fa-circle-info me-1"></i>La contraseña universal para cuentas de prueba es <strong>1234</strong>.</div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="submit" id="btn-login-submit" class="btn btn-primary-custom py-2 fw-semibold d-flex align-items-center justify-content-center">
+                                    <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner-login" role="status"></span>
+                                    <span id="text-login"><i class="fa-solid fa-arrow-right-to-bracket me-2"></i> Iniciar Sesión</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
+                                    <i class="fa-solid fa-user-plus me-1"></i> ¿No tienes cuenta? Registrar nuevo usuario
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center extra-small text-muted">
+                    <div id="login-api-status">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                            <i class="fa-solid fa-circle-check me-1"></i> Servidor API Conectado
+                        </span>
+                    </div>
+                    <div>Hora Oficial UTC-3 (Argentina)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navbar Superior Corporativo con Perfil Activo y Control de Sesión -->
     <nav class="navbar navbar-dark navbar-custom shadow-sm py-2 sticky-top">
         <div class="container-fluid px-4">
             <div class="d-flex align-items-center">
@@ -36,7 +164,8 @@
             </div>
             
             <div class="d-flex align-items-center gap-2 gap-md-3">
-                <div id="api-status-badge" class="api-status-badge badge bg-secondary text-white">
+                <!-- Badge de API condicionado a DevTools (oculto en vista pública general) -->
+                <div id="api-status-badge" class="api-status-badge badge bg-secondary text-white d-none">
                     <i class="fa-solid fa-spinner fa-spin me-1"></i> Comprobando API...
                 </div>
 
@@ -46,12 +175,15 @@
                     <span id="theme-toggle-text" class="d-none d-sm-inline">Modo Oscuro</span>
                 </button>
 
-                <!-- Dropdown de Perfiles Semilla con Ramiro Veloso Tester como por Defecto -->
+                <!-- Dropdown de Perfil Activo con Avatar, Saldo y Menú de Sesión -->
                 <div class="dropdown">
-                    <button class="btn btn-outline-light btn-sm dropdown-toggle rounded-pill px-3 fw-medium d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="dropdownUserButton">
-                        <i class="fa-solid fa-user-gear text-warning"></i>
-                        <span id="wallet-usuario-info" class="text-truncate" style="max-width: 260px;">Comprador Líder (comprador1@test.com)</span>
-                        <span id="nav-user-saldo" class="badge bg-success font-monospace" title="Saldo disponible en tiempo real">$105.000</span>
+                    <button class="navbar-user-pill dropdown-toggle border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="dropdownUserButton">
+                        <div class="navbar-user-avatar" id="nav-user-avatar">CL</div>
+                        <div class="d-flex flex-column text-start d-none d-sm-flex">
+                            <span id="wallet-usuario-info" class="fw-semibold text-truncate" style="max-width: 180px; font-size: 0.85rem;">Comprador Líder</span>
+                            <span class="extra-small text-white-50" id="wallet-usuario-email" style="font-size: 0.72rem;">comprador1@test.com</span>
+                        </div>
+                        <span id="nav-user-saldo" class="badge bg-success font-monospace ms-1" title="Saldo disponible en tiempo real">$105.000</span>
                     </button>
                     <ul id="dropdown-perfiles-semilla" class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width: 320px;">
                         <!-- Renderizado dinámicamente con saldos en tiempo real -->
@@ -90,24 +222,6 @@
                         <button class="nav-link text-start" id="tab-auditoria" data-bs-toggle="pill" data-bs-target="#content-auditoria" type="button" role="tab" aria-controls="content-auditoria" aria-selected="false">
                             <i class="fa-solid fa-clipboard-list me-2"></i>Auditoría de Eventos
                         </button>
-                    </div>
-
-                    <!-- Consola Rápida Carga Libre para Ramiro Veloso Tester -->
-                    <div class="mt-4 pt-3 border-top px-2">
-                        <div class="bg-light p-3 rounded-3 border">
-                            <h6 class="small fw-bold text-dark mb-1">
-                                <i class="fa-solid fa-bolt text-warning me-1"></i> Tester Ramiro Veloso
-                            </h6>
-                            <p class="extra-small text-muted mb-2">Carga libre de fondos para simulación instantánea de pujas:</p>
-                            <div class="d-grid gap-1">
-                                <button class="btn btn-success btn-sm extra-small fw-bold" onclick="cargarSaldoLibreRapido(100000)">
-                                    <i class="fa-solid fa-plus-circle me-1"></i> Carga Libre +$100.000
-                                </button>
-                                <button class="btn btn-outline-secondary btn-sm extra-small" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo">
-                                    Monto Personalizado...
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -234,10 +348,13 @@
                                             </div>
                                         </div>
 
+                                        <div id="crear-subasta-feedback" class="validation-feedback-box d-none mb-3"></div>
+
                                         <div class="d-flex justify-content-end gap-2">
                                             <button type="reset" class="btn btn-light px-4">Limpiar</button>
-                                            <button type="submit" id="btn-crear-subasta" class="btn btn-primary-custom px-4">
-                                                <i class="fa-solid fa-paper-plane me-2"></i> Publicar Subasta
+                                            <button type="submit" id="btn-crear-subasta" class="btn btn-primary-custom px-4 d-flex align-items-center justify-content-center">
+                                                <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner-crear" role="status" aria-hidden="true"></span>
+                                                <span id="text-crear"><i class="fa-solid fa-paper-plane me-2"></i> Publicar Subasta</span>
                                             </button>
                                         </div>
                                     </div>
@@ -248,16 +365,16 @@
                                             <div class="card auction-card shadow-sm">
                                                 <div class="card-img-wrapper">
                                                     <img id="crear-img-preview" src="assets/images/watch.png" class="card-img-top" alt="Preview">
-                                                    <span class="badge-categoria">Previsualización</span>
+                                                    <span id="crear-preview-categoria" class="badge-categoria">Previsualización</span>
                                                     <span class="badge badge-status bg-success">ACTIVA</span>
                                                 </div>
                                                 <div class="card-body p-3">
-                                                    <h6 class="fw-bold mb-1">Título de tu subasta</h6>
-                                                    <p class="small text-muted mb-2">Descripción de la publicación...</p>
-                                                    <div class="bg-white p-2 rounded border small mb-2">
+                                                    <h6 id="crear-preview-titulo" class="fw-bold mb-1 text-truncate">Título de tu subasta</h6>
+                                                    <p id="crear-preview-descripcion" class="small text-muted mb-2 text-truncate-2" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px;">Descripción de la publicación...</p>
+                                                    <div class="bg-light p-2 rounded border small mb-2">
                                                         <div class="d-flex justify-content-between">
                                                             <span>Precio Base:</span>
-                                                            <span class="fw-bold text-success">$50.000</span>
+                                                            <span id="crear-preview-precio" class="fw-bold text-success">$50.000</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -287,6 +404,7 @@
                             </div>
 
                             <div id="sala-banner-liderazgo"></div>
+                            <div id="sala-banner-concurrencia" class="d-none mb-3"></div>
 
                             <div class="row g-4">
                                 <div class="col-lg-7">
@@ -346,11 +464,16 @@
 
                                         <form id="form-realizar-puja">
                                             <div class="mb-3">
-                                                <label class="form-label small fw-bold">Monto a Ofertar ($ ARS)</label>
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <label class="form-label small fw-bold mb-0">Monto a Ofertar ($ ARS)</label>
+                                                    <span id="puja-minima-badge" class="badge bg-light text-secondary border font-monospace extra-small">Mínimo sugerido: $0</span>
+                                                </div>
                                                 <div class="input-group input-group-lg">
                                                     <span class="input-group-text">$</span>
                                                     <input type="number" id="input-monto-puja" class="form-control fw-bold" placeholder="Ingresa monto..." required>
                                                 </div>
+                                                <!-- Feedback reactivo de validación inline preventiva -->
+                                                <div id="bid-validation-feedback" class="validation-feedback-box d-none"></div>
                                             </div>
 
                                             <div class="d-flex justify-content-between align-items-center mb-3">
@@ -358,12 +481,13 @@
                                                 <div id="quick-bids-container" class="d-flex gap-2"></div>
                                             </div>
 
-                                            <button type="submit" id="btn-realizar-puja" class="btn btn-primary-custom btn-lg w-100 py-3">
-                                                <i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja
+                                            <button type="submit" id="btn-realizar-puja" class="btn btn-primary-custom btn-lg w-100 py-3 d-flex align-items-center justify-content-center">
+                                                <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner-puja" role="status" aria-hidden="true"></span>
+                                                <span id="text-puja"><i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja</span>
                                             </button>
 
-                                            <div class="form-text text-center mt-2 extra-small">
-                                                <i class="fa-solid fa-shield-halved text-success me-1"></i> Se ejecutará retención en Billetera Escrow vía <code>POST /api/Billetera/retener</code>.
+                                            <div class="form-text text-center mt-2 extra-small text-muted">
+                                                <i class="fa-solid fa-shield-halved text-success me-1"></i> Protección Escrow: Tus fondos se retienen de forma segura hasta el cierre.
                                             </div>
                                         </form>
                                     </div>
@@ -449,7 +573,9 @@
                                     <h6 class="fw-bold mb-0 text-dark">
                                         <i class="fa-solid fa-book-bookmark me-2 text-primary-custom"></i>Libro Mayor Contable (Ledger History)
                                     </h6>
-                                    <span class="extra-small text-muted">Endpoint: <code>GET /api/Billetera/{id}/movimientos</code></span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle extra-small">
+                                        <i class="fa-solid fa-shield-check me-1"></i> Asiento Criptográfico Verificado
+                                    </span>
                                 </div>
                                 <div class="table-responsive">
                                     <table class="table table-hover align-middle mb-0">
@@ -464,44 +590,6 @@
                                         </thead>
                                         <tbody id="wallet-tabla-movimientos"></tbody>
                                     </table>
-                                </div>
-                            </div>
-
-                            <div class="card border bg-light p-3">
-                                <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-vial me-2 text-warning"></i>Pruebas Manuales de Fondos Escrow</h6>
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <form id="form-test-retener" class="border p-3 rounded bg-white">
-                                            <span class="fw-bold extra-small text-uppercase d-block mb-2 text-warning">Probar Retención Preventiva (/retener)</span>
-                                            <div class="row g-2">
-                                                <div class="col-6">
-                                                    <input type="number" id="test-retener-monto" class="form-control form-control-sm" placeholder="Monto $" value="5000" required>
-                                                </div>
-                                                <div class="col-6">
-                                                    <input type="number" id="test-retener-subastaId" class="form-control form-control-sm" placeholder="Subasta ID" value="101">
-                                                </div>
-                                                <div class="col-12 mt-2">
-                                                    <button type="submit" class="btn btn-warning btn-sm w-100"><i class="fa-solid fa-lock me-1"></i> Retener en Escrow</button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <form id="form-test-liberar" class="border p-3 rounded bg-white">
-                                            <span class="fw-bold extra-small text-uppercase d-block mb-2 text-info">Probar Liberación de Saldo (/liberar)</span>
-                                            <div class="row g-2">
-                                                <div class="col-6">
-                                                    <input type="number" id="test-liberar-monto" class="form-control form-control-sm" placeholder="Monto $" value="5000" required>
-                                                </div>
-                                                <div class="col-6">
-                                                    <input type="number" id="test-liberar-subastaId" class="form-control form-control-sm" placeholder="Subasta ID" value="101">
-                                                </div>
-                                                <div class="col-12 mt-2">
-                                                    <button type="submit" class="btn btn-info btn-sm text-dark w-100"><i class="fa-solid fa-key me-1"></i> Liberar Fondos</button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -519,21 +607,24 @@
 
                             <div class="row g-3 mb-4">
                                 <div class="col-md-4">
-                                    <div class="border rounded-3 p-3 bg-light text-center">
-                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Pujas Realizadas</span>
-                                        <span id="stat-total-pujas" class="fs-2 fw-bold text-primary-custom">0</span>
+                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold mb-2">Pujas Realizadas</span>
+                                        <span id="stat-total-pujas" class="stat-metric-num text-primary-custom d-block">0</span>
+                                        <span class="extra-small text-muted mt-1 d-block"><i class="fa-solid fa-gavel me-1 text-primary-custom"></i>Total acumulado</span>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="border rounded-3 p-3 bg-light text-center">
-                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Subastas Publicadas</span>
-                                        <span id="stat-subastas-creadas" class="fs-2 fw-bold text-dark">0</span>
+                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold mb-2">Subastas Publicadas</span>
+                                        <span id="stat-subastas-creadas" class="stat-metric-num text-dark d-block">0</span>
+                                        <span class="extra-small text-muted mt-1 d-block"><i class="fa-solid fa-box-archive me-1 text-secondary"></i>Como vendedor</span>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="border rounded-3 p-3 bg-light text-center">
-                                        <span class="text-muted extra-small text-uppercase d-block fw-bold">Subastas Ganadas</span>
-                                        <span id="stat-subastas-ganadas" class="fs-2 fw-bold text-success">0</span>
+                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm">
+                                        <span class="text-muted extra-small text-uppercase d-block fw-bold mb-2">Subastas Ganadas</span>
+                                        <span id="stat-subastas-ganadas" class="stat-metric-num text-success d-block">0</span>
+                                        <span class="extra-small text-muted mt-1 d-block"><i class="fa-solid fa-trophy me-1 text-warning"></i>Adjudicadas</span>
                                     </div>
                                 </div>
                             </div>
@@ -680,7 +771,10 @@
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="fa-solid fa-bolt me-1"></i> Acreditar Fondos Inmediatos</button>
+                        <button type="submit" id="btn-modal-cargar-saldo" class="btn btn-success fw-bold d-flex align-items-center justify-content-center">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner-cargar" role="status"></span>
+                            <span id="text-cargar"><i class="fa-solid fa-bolt me-1"></i> Acreditar Fondos Inmediatos</span>
+                        </button>
                     </div>
                 </form>
             </div>
@@ -773,14 +867,143 @@
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-primary-custom"><i class="fa-solid fa-save me-1"></i> Registrar Usuario</button>
+                        <button type="submit" id="btn-modal-usuario" class="btn btn-primary-custom d-flex align-items-center justify-content-center">
+                            <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner-usuario" role="status"></span>
+                            <span id="text-usuario"><i class="fa-solid fa-save me-1"></i> Registrar Usuario</span>
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+    <!-- =================================================================== -->
+    <!-- BOTÓN FLOTANTE Y PANEL DE HERRAMIENTAS DE DESARROLLADOR (DEVTOOLS) -->
+    <!-- =================================================================== -->
+    <div class="devtools-fab" data-bs-toggle="offcanvas" data-bs-target="#offcanvasDevTools" aria-controls="offcanvasDevTools" title="Abrir DevTools / Herramientas Tester">
+        <i class="fa-solid fa-code fs-5"></i>
+    </div>
+
+    <div class="offcanvas offcanvas-end devtools-offcanvas shadow-lg" tabindex="-1" id="offcanvasDevTools" aria-labelledby="offcanvasDevToolsLabel" style="width: 420px;">
+        <div class="offcanvas-header border-bottom bg-dark text-white py-3">
+            <h5 class="offcanvas-title fw-bold fs-6" id="offcanvasDevToolsLabel">
+                <i class="fa-solid fa-laptop-code text-warning me-2"></i>Consola DevTools & Tester
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body p-3">
+            <!-- Estado de la API y Entorno -->
+            <div class="card border mb-3 bg-light">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-bold text-secondary">Estado Conexión API:</span>
+                        <div id="devtools-api-status" class="api-status-badge badge bg-secondary text-white">
+                            <i class="fa-solid fa-circle-nodes me-1"></i> Verificando...
+                        </div>
+                    </div>
+                    <div class="extra-small text-muted font-monospace mb-2">
+                        Base: <span id="devtools-api-url" class="text-dark">https://localhost:65102/api</span>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm w-100 extra-small" onclick="testearConexionApiDevTools()">
+                        <i class="fa-solid fa-rotate me-1"></i> Probar Ping a Servidor
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inyección Rápida de Saldo Tester (Ramiro Veloso) -->
+            <div class="card border mb-3">
+                <div class="card-header bg-light py-2">
+                    <span class="small fw-bold text-dark"><i class="fa-solid fa-bolt text-success me-1"></i> Simulación de Saldo Rápido</span>
+                </div>
+                <div class="card-body p-3">
+                    <p class="extra-small text-muted mb-2">Acredita saldo instantáneamente al usuario activo sin pasar por pasarelas externas:</p>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-success btn-sm flex-grow-1" onclick="cargarSaldoLibreRapido(50000)">
+                            +$50.000
+                        </button>
+                        <button class="btn btn-success btn-sm flex-grow-1 fw-bold" onclick="cargarSaldoLibreRapido(100000)">
+                            +$100.000
+                        </button>
+                        <button class="btn btn-outline-success btn-sm flex-grow-1" onclick="cargarSaldoLibreRapido(250000)">
+                            +$250.000
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pruebas de Fondos Escrow Manuales -->
+            <div class="card border mb-3">
+                <div class="card-header bg-light py-2">
+                    <span class="small fw-bold text-dark"><i class="fa-solid fa-vial text-warning me-1"></i> Pruebas Manuales Escrow</span>
+                </div>
+                <div class="card-body p-3">
+                    <form id="form-test-retener" class="mb-3">
+                        <span class="extra-small fw-bold text-uppercase d-block mb-1 text-warning">POST /api/Billetera/retener</span>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <input type="number" id="test-retener-monto" class="form-control form-control-sm" placeholder="Monto $" value="5000" required>
+                            </div>
+                            <div class="col-5">
+                                <input type="number" id="test-retener-subastaId" class="form-control form-control-sm" placeholder="Subasta ID" value="1">
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" id="btn-test-retener" class="btn btn-warning btn-sm w-100 text-dark fw-semibold">
+                                    <span class="spinner-border spinner-border-sm me-1 d-none" id="spinner-test-retener" role="status"></span>
+                                    <span id="text-test-retener"><i class="fa-solid fa-lock me-1"></i> Retener en Escrow</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <form id="form-test-liberar">
+                        <span class="extra-small fw-bold text-uppercase d-block mb-1 text-info">POST /api/Billetera/liberar</span>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <input type="number" id="test-liberar-monto" class="form-control form-control-sm" placeholder="Monto $" value="5000" required>
+                            </div>
+                            <div class="col-5">
+                                <input type="number" id="test-liberar-subastaId" class="form-control form-control-sm" placeholder="Subasta ID" value="1">
+                            </div>
+                            <div class="col-12">
+                                <button type="submit" id="btn-test-liberar" class="btn btn-info btn-sm w-100 text-dark fw-semibold">
+                                    <span class="spinner-border spinner-border-sm me-1 d-none" id="spinner-test-liberar" role="status"></span>
+                                    <span id="text-test-liberar"><i class="fa-solid fa-key me-1"></i> Liberar Fondos</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Simulación de Errores de Concurrencia (HTTP 409) -->
+            <div class="card border mb-3">
+                <div class="card-header bg-light py-2">
+                    <span class="small fw-bold text-dark"><i class="fa-solid fa-code-compare text-danger me-1"></i> Test de Concurrencia (409)</span>
+                </div>
+                <div class="card-body p-3">
+                    <p class="extra-small text-muted mb-2">Simula colisión de versión optimista (Optimistic Concurrency Control) para verificar la recuperación en vivo:</p>
+                    <button class="btn btn-outline-danger btn-sm w-100" onclick="simularColisionConcurrencia()">
+                        <i class="fa-solid fa-bolt-lightning me-1"></i> Simular Puja Simultánea 409 Conflict
+                    </button>
+                </div>
+            </div>
+
+            <!-- Forzar Background Worker -->
+            <div class="card border">
+                <div class="card-header bg-light py-2">
+                    <span class="small fw-bold text-dark"><i class="fa-solid fa-robot text-primary-custom me-1"></i> Background Worker</span>
+                </div>
+                <div class="card-body p-3">
+                    <button class="btn btn-outline-primary-custom btn-sm w-100" onclick="ejecutarBackgroundWorkerManual()">
+                        <i class="fa-solid fa-gears me-1"></i> Forzar Procesar Subastas Vencidas
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenedor Flotante de Notificaciones Toast Moderno -->
+    <div id="toast-container" class="toast-container-modern"></div>
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
