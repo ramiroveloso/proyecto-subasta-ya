@@ -13,6 +13,246 @@ let timerCardsInterval = null;
 let contadorSyncInterval = 0;
 
 /* ==========================================================================
+   GESTIÓN DE SESIÓN & AUTENTICACIÓN MULTI-PERFIL
+   ========================================================================== */
+const KEY_SESION = 'subastaya_usuario_sesion';
+
+function obtenerSesionGuardada() {
+    try {
+        const sesion = localStorage.getItem(KEY_SESION);
+        return sesion ? JSON.parse(sesion) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function guardarSesion(usuario) {
+    if (usuario) {
+        localStorage.setItem(KEY_SESION, JSON.stringify({
+            id: usuario.id ?? usuario.Id,
+            nombre: usuario.nombre ?? usuario.Nombre,
+            email: usuario.email ?? usuario.Email
+        }));
+    }
+}
+
+function borrarSesion() {
+    localStorage.removeItem(KEY_SESION);
+}
+
+function mostrarModalLogin() {
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) {
+        overlay.classList.remove('d-none');
+        cargarPerfilesEnLogin();
+    }
+}
+
+function ocultarModalLogin() {
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) {
+        overlay.classList.add('d-none');
+    }
+}
+
+async function iniciarSesion(usuario) {
+    usuarioActual = {
+        id: usuario.id ?? usuario.Id,
+        nombre: usuario.nombre ?? usuario.Nombre,
+        email: usuario.email ?? usuario.Email,
+        saldoInicial: usuario.saldoInicial ?? 0
+    };
+    guardarSesion(usuarioActual);
+    ocultarModalLogin();
+
+    await renderizarSelectorPerfilesSemilla();
+    await actualizarBilleteraUI();
+    actualizarTarjetasCatalogo();
+    await cargarMisActividades();
+
+    if (subastaSeleccionadaSala) {
+        actualizarMonitorPujasSala();
+        validarPujaEnVivo();
+    }
+
+    const rol = obtenerRolUsuario(usuarioActual);
+    mostrarToast(`¡Bienvenido/a <strong>${usuarioActual.nombre}</strong>! Rol activo: <span class="badge bg-light text-dark border">${rol}</span>`, 'Sesión Iniciada', 'success');
+}
+
+function cerrarSesion() {
+    borrarSesion();
+    usuarioActual = null;
+    mostrarModalLogin();
+    mostrarToast('Has cerrado la sesión de forma segura.', 'Sesión Finalizada', 'info');
+}
+
+function obtenerRolUsuario(usuario) {
+    if (!usuario) return 'Usuario';
+    const email = (usuario.email || '').toLowerCase();
+    const nombre = (usuario.nombre || '').toLowerCase();
+    if (email.includes('vendedor') || nombre.includes('vendedor')) return 'Vendedor';
+    if (email.includes('comprador1') || nombre.includes('líder') || nombre.includes('lider')) return 'Comprador Líder';
+    if (email.includes('comprador2') || nombre.includes('habilitado')) return 'Comprador Habilitado';
+    if (email.includes('sinfondos') || nombre.includes('sin fondos')) return 'Usuario Sin Saldo';
+    if (email.includes('tester') || nombre.includes('tester')) return 'Tester Ramiro Veloso';
+    return 'Comprador';
+}
+
+function obtenerIniciales(nombre) {
+    if (!nombre) return 'US';
+    const partes = nombre.trim().split(/\s+/);
+    if (partes.length >= 2) {
+        return (partes[0][0] + partes[1][0]).toUpperCase();
+    }
+    return nombre.substring(0, 2).toUpperCase();
+}
+
+async function cargarPerfilesEnLogin() {
+    const grid = document.getElementById('login-profiles-grid');
+    if (!grid) return;
+
+    grid.innerHTML = `
+        <div class="col-12 text-center py-4">
+            <div class="spinner-border text-primary-custom" role="status"></div>
+            <div class="small text-muted mt-2">Cargando perfiles y saldos en tiempo real...</div>
+        </div>
+    `;
+
+    try {
+        const usuarios = await fetchObtenerUsuarios();
+        if (usuarios && usuarios.length > 0) {
+            PERFILES_SEMILLA = usuarios.map(u => ({
+                id: u.id ?? u.Id,
+                nombre: u.nombre ?? u.Nombre,
+                email: u.email ?? u.Email,
+                saldoInicial: 0
+            }));
+        }
+
+        const billeteras = await Promise.all(
+            PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
+        );
+
+        grid.innerHTML = '';
+        PERFILES_SEMILLA.forEach((p, idx) => {
+            const b = billeteras[idx];
+            const saldoDisp = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
+            const rol = obtenerRolUsuario(p);
+            const iniciales = obtenerIniciales(p.nombre);
+            const esActivo = Boolean(usuarioActual && p.id === usuarioActual.id);
+
+            let avatarBg = '#581845';
+            let badgeRolClass = 'bg-primary-subtle text-primary border border-primary-subtle';
+            if (rol.includes('Vendedor')) {
+                avatarBg = '#c25e00';
+                badgeRolClass = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+            } else if (rol.includes('Líder')) {
+                avatarBg = '#198754';
+                badgeRolClass = 'bg-success-subtle text-success border border-success-subtle';
+            } else if (rol.includes('Sin Saldo')) {
+                avatarBg = '#dc3545';
+                badgeRolClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+            }
+
+            const col = document.createElement('div');
+            col.className = 'col-sm-6';
+            col.innerHTML = `
+                <div class="profile-card-option ${esActivo ? 'active-profile' : ''}" onclick="seleccionarPerfilParaLogin(${p.id})">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="profile-avatar me-3 shadow-sm" style="background-color: ${avatarBg};">
+                            ${iniciales}
+                        </div>
+                        <div class="text-truncate flex-grow-1">
+                            <div class="fw-bold text-dark text-truncate">${p.nombre}</div>
+                            <div class="extra-small text-muted text-truncate">${p.email}</div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pt-2 border-top mt-2">
+                        <span class="badge ${badgeRolClass} extra-small">${rol}</span>
+                        <span class="font-monospace fw-bold ${saldoDisp > 0 ? 'text-success' : 'text-danger'} small">
+                            $${saldoDisp.toLocaleString('es-AR')}
+                        </span>
+                    </div>
+                    <div class="mt-2 text-end">
+                        <button class="btn btn-sm ${esActivo ? 'btn-success' : 'btn-outline-primary-custom'} w-100 extra-small fw-semibold py-1">
+                            ${esActivo ? '<i class="fa-solid fa-check me-1"></i> Perfil Activo' : '<i class="fa-solid fa-arrow-right-to-bracket me-1"></i> Ingresar'}
+                        </button>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(col);
+        });
+    } catch (e) {
+        console.error("Error al cargar perfiles en login", e);
+        grid.innerHTML = `<div class="col-12 text-center text-danger py-3">Error al conectar con la API de usuarios.</div>`;
+    }
+}
+
+function iniciarSesionPorId(perfilId) {
+    const perfil = PERFILES_SEMILLA.find(p => p.id === perfilId);
+    if (perfil) {
+        iniciarSesion(perfil);
+    }
+}
+
+async function procesarLoginCredenciales(event) {
+    event.preventDefault();
+    const usuarioInput = document.getElementById('login-input-usuario')?.value.trim();
+    const passwordInput = document.getElementById('login-input-password')?.value;
+    const alertError = document.getElementById('login-error-alert');
+    const textError = document.getElementById('login-error-text');
+
+    if (!usuarioInput) {
+        if (alertError && textError) {
+            textError.textContent = 'Debe ingresar un usuario o correo electrónico.';
+            alertError.classList.remove('d-none');
+        }
+        return;
+    }
+
+    setBotonCargando('btn-login-submit', 'spinner-login', 'text-login', true, '<i class="fa-solid fa-circle-notch fa-spin me-2"></i> Verificando...');
+    if (alertError) alertError.classList.add('d-none');
+
+    try {
+        const user = await fetchLogin(usuarioInput, passwordInput);
+        await iniciarSesion(user);
+        document.getElementById('form-login-credenciales')?.reset();
+    } catch (err) {
+        if (alertError && textError) {
+            textError.textContent = err.message || 'Usuario o contraseña no reconocidos.';
+            alertError.classList.remove('d-none');
+        }
+    } finally {
+        setBotonCargando('btn-login-submit', 'spinner-login', 'text-login', false);
+    }
+}
+
+/* Helper para estados de carga interactivos (spinners) en botones */
+function setBotonCargando(btnId, spinnerId, textId, cargando, textoCarga = 'Procesando...') {
+    const btn = typeof btnId === 'string' ? document.getElementById(btnId) : btnId;
+    if (!btn) return;
+    const spinner = typeof spinnerId === 'string' ? document.getElementById(spinnerId) : spinnerId;
+    const text = typeof textId === 'string' ? document.getElementById(textId) : textId;
+
+    if (cargando) {
+        btn.disabled = true;
+        btn.classList.add('btn-loading');
+        if (spinner) spinner.classList.remove('d-none');
+        if (text) {
+            btn.dataset.originalText = text.innerHTML;
+            text.innerHTML = textoCarga;
+        }
+    } else {
+        btn.disabled = false;
+        btn.classList.remove('btn-loading');
+        if (spinner) spinner.classList.add('d-none');
+        if (text && btn.dataset.originalText) {
+            text.innerHTML = btn.dataset.originalText;
+        }
+    }
+}
+
+/* ==========================================================================
    CONFIGURACIÓN DE HUSOS HORARIOS (UTC EN BASE DE DATOS / UTC-3 EN FRONTEND)
    ========================================================================== */
 const TIMEZONE_UTC3 = 'America/Argentina/Buenos_Aires';
@@ -182,6 +422,13 @@ function aplicarTema(tema) {
 document.addEventListener("DOMContentLoaded", async () => {
     inicializarModoOscuro();
     inicializarFechasFormulario();
+    configurarEventosUI();
+
+    // Conectar el formulario de login por credenciales
+    const formLoginCredenciales = document.getElementById('form-login-credenciales');
+    if (formLoginCredenciales) {
+        formLoginCredenciales.addEventListener('submit', procesarLoginCredenciales);
+    }
 
     // 1. Cargar perfiles dinámicamente desde la Base de Datos / API
     const usuariosRemotos = await fetchObtenerUsuarios();
@@ -190,15 +437,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             id: u.id ?? u.Id,
             nombre: u.nombre ?? u.Nombre,
             email: u.email ?? u.Email,
-            saldoInicial: 0 // El saldo real se consulta dinámicamente de su billetera
+            saldoInicial: 0
         }));
-        const usuarioEncontrado = usuarioActual ? PERFILES_SEMILLA.find(p => p.id === usuarioActual.id) : null;
-        usuarioActual = usuarioEncontrado || PERFILES_SEMILLA[1] || PERFILES_SEMILLA[0];
+    }
+
+    // 2. Verificar si existe una sesión guardada en localStorage
+    const sesionGuardada = obtenerSesionGuardada();
+    if (sesionGuardada) {
+        const usuarioEncontrado = PERFILES_SEMILLA.find(p => p.id === sesionGuardada.id || p.email === sesionGuardada.email);
+        usuarioActual = usuarioEncontrado || sesionGuardada;
+        ocultarModalLogin();
+    } else {
+        // No hay sesión activa: mostrar pantalla de bienvenida / login bloqueante
+        usuarioActual = PERFILES_SEMILLA[1] || PERFILES_SEMILLA[0] || null;
+        mostrarModalLogin();
     }
 
     await renderizarSelectorPerfilesSemilla();
-    configurarEventosUI();
-
     await cargarCategorias();
     await aplicarFiltros();
     await actualizarBilleteraUI();
@@ -215,67 +470,111 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function renderizarSelectorPerfilesSemilla() {
     const dropdownMenu = document.getElementById('dropdown-perfiles-semilla');
-    if (!dropdownMenu) return;
+    if (!dropdownMenu || !usuarioActual) return;
 
-    dropdownMenu.innerHTML = '<li><h6 class="dropdown-header text-uppercase extra-small fw-bold">Perfiles de Prueba / Tester</h6></li>';
-    
     // Obtenemos los saldos actuales de todas las billeteras en paralelo
     const billeteras = await Promise.all(
         PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
     );
 
+    const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
+    const saldoActualDisp = bActual ? (bActual.saldoDisponible ?? bActual.SaldoDisponible ?? (usuarioActual.saldoInicial || 0)) : (usuarioActual.saldoInicial || 0);
+    const saldoActualRet = bActual ? (bActual.saldoRetenido ?? bActual.SaldoRetenido ?? 0) : 0;
+    const saldoActualTotal = bActual ? (bActual.saldoTotal ?? bActual.SaldoTotal ?? (saldoActualDisp + saldoActualRet)) : saldoActualDisp;
+
+    // Sincronizar Avatar, Nombre y Saldo en el botón de la barra superior
+    const navAvatar = document.getElementById('nav-user-avatar');
+    if (navAvatar) {
+        navAvatar.textContent = obtenerIniciales(usuarioActual.nombre);
+    }
+
+    const userInfo = document.getElementById('wallet-usuario-info');
+    if (userInfo) {
+        userInfo.textContent = usuarioActual.nombre;
+    }
+
+    const userEmail = document.getElementById('wallet-usuario-email');
+    if (userEmail) {
+        userEmail.textContent = usuarioActual.email;
+    }
+
+    const navBadge = document.getElementById('nav-user-saldo');
+    if (navBadge) {
+        navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
+        navBadge.className = `badge font-monospace ms-1 ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
+    }
+
+    const rol = obtenerRolUsuario(usuarioActual);
+
+    // Contenido del menú desplegable de perfil
+    dropdownMenu.innerHTML = `
+        <li class="px-3 py-2 border-bottom bg-light">
+            <div class="d-flex align-items-center mb-2">
+                <div class="navbar-user-avatar me-2" style="width: 34px; height: 34px; font-size: 0.9rem;">
+                    ${obtenerIniciales(usuarioActual.nombre)}
+                </div>
+                <div class="text-truncate">
+                    <div class="fw-bold text-dark text-truncate">${usuarioActual.nombre}</div>
+                    <div class="extra-small text-muted text-truncate">${usuarioActual.email}</div>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle extra-small">${rol}</span>
+                <span class="extra-small text-muted font-monospace">ID: #${usuarioActual.id}</span>
+            </div>
+            <div class="row g-1 text-center font-monospace extra-small">
+                <div class="col-4 bg-white p-1 rounded border">
+                    <span class="text-muted d-block" style="font-size: 0.65rem;">DISPONIBLE</span>
+                    <span class="fw-bold text-success">$${saldoActualDisp.toLocaleString('es-AR')}</span>
+                </div>
+                <div class="col-4 bg-white p-1 rounded border">
+                    <span class="text-muted d-block" style="font-size: 0.65rem;">RETENIDO</span>
+                    <span class="fw-bold text-warning">$${saldoActualRet.toLocaleString('es-AR')}</span>
+                </div>
+                <div class="col-4 bg-white p-1 rounded border">
+                    <span class="text-muted d-block" style="font-size: 0.65rem;">TOTAL</span>
+                    <span class="fw-bold text-dark">$${saldoActualTotal.toLocaleString('es-AR')}</span>
+                </div>
+            </div>
+        </li>
+        <li class="px-2 py-2">
+            <button class="btn btn-success btn-sm w-100 fw-bold shadow-sm extra-small" onclick="cargarSaldoLibreRapido(100000)">
+                <i class="fa-solid fa-bolt me-1"></i> Carga Rápida +$100.000 a ${usuarioActual.nombre.split(' ')[0]}
+            </button>
+        </li>
+        <li><hr class="dropdown-divider my-1"></li>
+        <li><h6 class="dropdown-header text-uppercase extra-small fw-bold">Cambiar Perfil Activo:</h6></li>
+    `;
+
     PERFILES_SEMILLA.forEach((p, idx) => {
         const b = billeteras[idx];
         const saldoDisp = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? p.saldoInicial) : p.saldoInicial;
-        const saldoRet = b ? (b.saldoRetenido ?? b.SaldoRetenido ?? 0) : 0;
-        const esRamiro = p.email === 'ramiro.veloso@tester.com';
         const esActivo = Boolean(usuarioActual && p.id === usuarioActual.id);
+        const pRol = obtenerRolUsuario(p);
 
         dropdownMenu.innerHTML += `
             <li>
-                <a class="dropdown-item d-flex align-items-center justify-content-between py-2 ${esActivo ? 'active fw-bold' : ''}" 
+                <a class="dropdown-item d-flex align-items-center justify-content-between py-1 px-3 ${esActivo ? 'active fw-bold' : ''}" 
                    href="#" onclick="cambiarPerfilSemilla(${p.id}); return false;" data-dropdown-user-id="${p.id}">
-                    <div class="me-2">
-                        <div class="fw-bold">${esRamiro ? '<i class="fa-solid fa-star text-warning me-1"></i>' : ''}${p.nombre}</div>
-                        <div class="extra-small opacity-75">${p.email}</div>
+                    <div class="me-2 text-truncate">
+                        <div class="text-truncate">${esActivo ? '<i class="fa-solid fa-check me-1 text-warning"></i>' : ''}${p.nombre}</div>
+                        <div class="extra-small opacity-75">${pRol}</div>
                     </div>
-                    <div class="text-end">
-                        <span class="badge badge-saldo font-monospace ${saldoDisp > 0 ? (esActivo ? 'bg-light text-dark' : 'bg-success-subtle text-success border border-success-subtle') : 'bg-danger-subtle text-danger border border-danger-subtle'}">
-                            $${saldoDisp.toLocaleString('es-AR')}
-                        </span>
-                        <div class="retencion-info extra-small ${saldoRet > 0 ? (esActivo ? 'text-warning' : 'text-warning-emphasis') : 'd-none'}" style="font-size: 0.72rem;">
-                            ${saldoRet > 0 ? `(Ret: $${saldoRet.toLocaleString('es-AR')})` : ''}
-                        </div>
-                    </div>
+                    <span class="badge badge-saldo font-monospace ${saldoDisp > 0 ? (esActivo ? 'bg-light text-dark' : 'bg-success-subtle text-success border border-success-subtle') : 'bg-danger-subtle text-danger border border-danger-subtle'}">
+                        $${saldoDisp.toLocaleString('es-AR')}
+                    </span>
                 </a>
             </li>
         `;
     });
-    
-    dropdownMenu.innerHTML += '<li><hr class="dropdown-divider"></li>';
+
     dropdownMenu.innerHTML += `
-        <li class="px-2 py-1">
-            <button class="btn btn-success btn-sm w-100 fw-bold shadow-sm" onclick="cargarSaldoLibreRapido(100000)">
-                <i class="fa-solid fa-coins me-1"></i> Carga Libre +$100.000 a ${usuarioActual ? usuarioActual.nombre.split(' ')[0] : 'Usuario'}
-            </button>
-        </li>
-        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo"><i class="fa-solid fa-wallet me-2 text-primary-custom"></i>Consola Carga Libre de Saldo...</a></li>
-        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario"><i class="fa-solid fa-user-plus me-2 text-secondary"></i>Crear Nuevo Usuario</a></li>
+        <li><hr class="dropdown-divider my-1"></li>
+        <li><a class="dropdown-item extra-small" href="#" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo"><i class="fa-solid fa-wallet me-2 text-primary-custom"></i>Consola Carga Libre de Saldo...</a></li>
+        <li><a class="dropdown-item extra-small" href="#" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario"><i class="fa-solid fa-user-plus me-2 text-secondary"></i>Crear Nuevo Usuario</a></li>
+        <li><hr class="dropdown-divider my-1"></li>
+        <li><a class="dropdown-item text-danger extra-small fw-semibold" href="#" onclick="cerrarSesion(); return false;"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i>Cerrar Sesión / Cambiar de Perfil</a></li>
     `;
-
-    // Sincronizar nombre de usuario y badge de saldo en el botón de la barra superior
-    const userInfo = document.getElementById('wallet-usuario-info');
-    if (userInfo && usuarioActual) {
-        userInfo.textContent = `${usuarioActual.nombre} (${usuarioActual.email})`;
-    }
-
-    const bActual = billeteras.find(b => b && usuarioActual && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
-    const saldoActualDisp = bActual ? (bActual.saldoDisponible ?? bActual.SaldoDisponible ?? (usuarioActual ? usuarioActual.saldoInicial : 0)) : (usuarioActual ? usuarioActual.saldoInicial : 0);
-    const navBadge = document.getElementById('nav-user-saldo');
-    if (navBadge) {
-        navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
-        navBadge.className = `badge font-monospace ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
-    }
 }
 
 async function sincronizarSaldosDropdown() {
@@ -346,20 +645,7 @@ function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo, nuevoSaldoReten
 async function cambiarPerfilSemilla(usuarioId) {
     const perfil = PERFILES_SEMILLA.find(p => p.id === usuarioId);
     if (!perfil) return;
-
-    usuarioActual = perfil;
-    document.getElementById('wallet-usuario-info').textContent = `${perfil.nombre} (${perfil.email})`;
-
-    await renderizarSelectorPerfilesSemilla();
-    await actualizarBilleteraUI();
-    actualizarTarjetasCatalogo();
-    await cargarMisActividades();
-
-    if (subastaSeleccionadaSala) {
-        actualizarMonitorPujasSala();
-    }
-
-    mostrarToast(`Perfil activo cambiado a: <strong>${perfil.nombre}</strong> (${perfil.email})`, 'Perfil Activo Actualizado', 'info');
+    await iniciarSesion(perfil);
 }
 
 /** Carga de Saldo Libre Inmediata (1-Click) para Pruebas del Tester */
@@ -409,16 +695,60 @@ async function cargarCategorias() {
     }
 }
 
+function renderizarSkeletonsCatalogo(cantidad = 6) {
+    const grid = document.getElementById('catalogo-grid');
+    if (!grid) return;
+    let skeletonsHtml = '';
+    for (let i = 0; i < cantidad; i++) {
+        skeletonsHtml += `
+            <div class="col">
+                <div class="skeleton-card shadow-sm p-0">
+                    <div class="skeleton-box skeleton-img mb-2"></div>
+                    <div class="p-3">
+                        <div class="skeleton-box mb-2" style="width: 70%; height: 18px;"></div>
+                        <div class="skeleton-box mb-3" style="width: 90%; height: 14px;"></div>
+                        <div class="bg-light p-2 rounded border mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <div class="skeleton-box" style="width: 40%; height: 12px;"></div>
+                                <div class="skeleton-box" style="width: 35%; height: 16px;"></div>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <div class="skeleton-box" style="width: 30%; height: 10px;"></div>
+                                <div class="skeleton-box" style="width: 25%; height: 10px;"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-box" style="width: 100%; height: 32px; border-radius: 8px;"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    grid.innerHTML = skeletonsHtml;
+}
+
+function renderizarSkeletonsBilletera(filas = 4) {
+    const tbody = document.getElementById('wallet-tabla-movimientos');
+    if (!tbody) return;
+    let skeletonsHtml = '';
+    for (let i = 0; i < filas; i++) {
+        skeletonsHtml += `
+            <tr>
+                <td><div class="skeleton-box" style="width: 120px; height: 20px; border-radius: 12px;"></div></td>
+                <td><div class="skeleton-box" style="width: 80px; height: 18px;"></div></td>
+                <td><div class="skeleton-box" style="width: 130px; height: 14px;"></div></td>
+                <td><div class="skeleton-box" style="width: 160px; height: 14px;"></div></td>
+                <td><div class="skeleton-box" style="width: 90px; height: 14px;"></div></td>
+            </tr>
+        `;
+    }
+    tbody.innerHTML = skeletonsHtml;
+}
+
 async function aplicarFiltros() {
     const grid = document.getElementById('catalogo-grid');
     if (!grid) return;
 
-    grid.innerHTML = `
-        <div class="col-12 text-center py-5">
-            <div class="spinner-border text-primary-custom" role="status"></div>
-            <p class="text-muted mt-2 small">Cargando catálogo en tiempo real...</p>
-        </div>
-    `;
+    renderizarSkeletonsCatalogo(6);
 
     try {
         subastasCache = await fetchObtenerSubastas();
@@ -515,7 +845,7 @@ async function aplicarFiltros() {
 
             if (subEstado === 'PROGRAMADA') {
                 labelTiempo = 'Inicia:';
-                btnText = 'Ver Subasta Programada';
+                btnText = 'Ver Subasta';
                 btnIcon = 'fa-regular fa-clock';
                 btnClass = 'btn-outline-warning text-dark';
                 badgeTimerHtml = `
@@ -527,7 +857,7 @@ async function aplicarFiltros() {
                 `;
             } else if (subEstado === 'ACTIVA') {
                 labelTiempo = 'Cierre:';
-                btnText = 'Entrar a Sala en Vivo';
+                btnText = 'Pujar Ahora';
                 btnIcon = 'fa-solid fa-gavel';
                 btnClass = 'btn-primary-custom';
                 badgeTimerHtml = `
@@ -539,7 +869,7 @@ async function aplicarFiltros() {
                 `;
             } else if (subEstado === 'FINALIZADA') {
                 labelTiempo = 'Cerró (UTC-3):';
-                btnText = 'Ver Sala / Resultados';
+                btnText = 'Ver Subasta';
                 btnIcon = 'fa-solid fa-flag-checkered';
                 btnClass = 'btn-secondary';
                 badgeTimerHtml = `
@@ -550,7 +880,7 @@ async function aplicarFiltros() {
                 `;
             } else { // DESIERTA
                 labelTiempo = 'Cerró (UTC-3):';
-                btnText = 'Ver Sala / Sin Ofertas';
+                btnText = 'Ver Subasta';
                 btnIcon = 'fa-solid fa-ban';
                 btnClass = 'btn-dark';
                 badgeTimerHtml = `
@@ -685,16 +1015,16 @@ function actualizarTarjetaCatalogo(subastaId, nuevoMontoAnimar = null) {
     if (actionBtn) {
         if (subEstado === 'PROGRAMADA') {
             actionBtn.className = 'btn btn-outline-warning text-dark btn-sm w-100 mt-auto card-action-btn';
-            actionBtn.innerHTML = '<i class="fa-regular fa-clock me-1"></i> Ver Subasta Programada';
+            actionBtn.innerHTML = '<i class="fa-regular fa-clock me-1"></i> Ver Subasta';
         } else if (subEstado === 'ACTIVA') {
             actionBtn.className = 'btn btn-primary-custom btn-sm w-100 mt-auto card-action-btn';
-            actionBtn.innerHTML = '<i class="fa-solid fa-gavel me-1"></i> Entrar a Sala en Vivo';
+            actionBtn.innerHTML = '<i class="fa-solid fa-gavel me-1"></i> Pujar Ahora';
         } else if (subEstado === 'FINALIZADA') {
             actionBtn.className = 'btn btn-secondary btn-sm w-100 mt-auto card-action-btn';
-            actionBtn.innerHTML = '<i class="fa-solid fa-flag-checkered me-1"></i> Ver Sala / Resultados';
+            actionBtn.innerHTML = '<i class="fa-solid fa-flag-checkered me-1"></i> Ver Subasta';
         } else {
             actionBtn.className = 'btn btn-dark btn-sm w-100 mt-auto card-action-btn';
-            actionBtn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Ver Sala / Sin Ofertas';
+            actionBtn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Ver Subasta';
         }
     }
 
@@ -836,22 +1166,45 @@ async function guardarSubasta(event) {
     const fechaInicioVal = document.getElementById('crear-fechaInicio').value;
     const fechaFinVal = document.getElementById('crear-fechaFin').value;
 
+    const feedback = document.getElementById('crear-subasta-feedback');
+    if (feedback) feedback.classList.add('d-none');
+
     if (!titulo || !categoriaId) {
+        if (feedback) {
+            feedback.className = 'validation-feedback-box alert alert-warning py-2 small mb-3';
+            feedback.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Por favor complete el título y seleccione una categoría.';
+            feedback.classList.remove('d-none');
+        }
         mostrarToast('Complete el título y la categoría.', 'Campos Requeridos', 'warning');
         return;
     }
 
     if (precioBase <= 0 || isNaN(precioBase)) {
+        if (feedback) {
+            feedback.className = 'validation-feedback-box alert alert-danger py-2 small mb-3';
+            feedback.innerHTML = '<i class="fa-solid fa-circle-exclamation me-1"></i> El precio base debe ser mayor a $0.';
+            feedback.classList.remove('d-none');
+        }
         mostrarToast('El precio base debe ser mayor a 0.', 'Error de Validación', 'danger');
         return;
     }
 
     if (incrementoMinimo <= 0 || isNaN(incrementoMinimo)) {
+        if (feedback) {
+            feedback.className = 'validation-feedback-box alert alert-danger py-2 small mb-3';
+            feedback.innerHTML = '<i class="fa-solid fa-circle-exclamation me-1"></i> El incremento mínimo debe ser mayor a $0.';
+            feedback.classList.remove('d-none');
+        }
         mostrarToast('El incremento mínimo debe ser mayor a 0.', 'Error de Validación', 'danger');
         return;
     }
 
     if (!fechaInicioVal || !fechaFinVal) {
+        if (feedback) {
+            feedback.className = 'validation-feedback-box alert alert-warning py-2 small mb-3';
+            feedback.innerHTML = '<i class="fa-solid fa-calendar-xmark me-1"></i> Complete ambas fechas: inicio y cierre.';
+            feedback.classList.remove('d-none');
+        }
         mostrarToast('Complete las fechas de inicio y cierre.', 'Campos Requeridos', 'warning');
         return;
     }
@@ -861,13 +1214,16 @@ async function guardarSubasta(event) {
     const fechaFinIso = utc3InputToIsoUtc(fechaFinVal);
 
     if (new Date(fechaInicioIso) >= new Date(fechaFinIso)) {
+        if (feedback) {
+            feedback.className = 'validation-feedback-box alert alert-danger py-2 small mb-3';
+            feedback.innerHTML = '<i class="fa-solid fa-clock me-1"></i> La fecha de inicio debe ser anterior a la fecha de finalización.';
+            feedback.classList.remove('d-none');
+        }
         mostrarToast('La fecha de inicio debe ser anterior a la fecha de finalización.', 'Error de Fechas', 'danger');
         return;
     }
 
-    const btnSubmit = document.getElementById('btn-crear-subasta');
-    btnSubmit.disabled = true;
-    btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Publicando...';
+    setBotonCargando('btn-crear-subasta', 'spinner-crear', 'text-crear', true, '<i class="fa-solid fa-circle-notch fa-spin me-2"></i> Publicando subasta...');
 
     const esProgramada = new Date(fechaInicioIso) > new Date();
     const nuevaSubastaDto = {
@@ -890,6 +1246,7 @@ async function guardarSubasta(event) {
         document.getElementById('form-crear-subasta').reset();
         inicializarFechasFormulario();
         document.getElementById('crear-img-preview').src = 'assets/images/watch.png';
+        if (feedback) feedback.classList.add('d-none');
 
         await aplicarFiltros();
         const tabCatalogoBtn = document.getElementById('tab-catalogo');
@@ -899,10 +1256,14 @@ async function guardarSubasta(event) {
         }
 
     } catch (err) {
+        if (feedback) {
+            feedback.className = 'validation-feedback-box alert alert-danger py-2 small mb-3';
+            feedback.innerHTML = `<i class="fa-solid fa-circle-exclamation me-1"></i> Error al publicar: ${err.message}`;
+            feedback.classList.remove('d-none');
+        }
         mostrarToast(`Error al crear subasta: ${err.message}`, 'Error de Servidor', 'danger');
     } finally {
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane me-2"></i> Publicar Subasta';
+        setBotonCargando('btn-crear-subasta', 'spinner-crear', 'text-crear', false);
     }
 }
 
@@ -980,6 +1341,8 @@ async function cargarSalaEnVivo(subastaId) {
         const select = document.getElementById('sala-subasta-selector');
         if (select) select.value = subastaSeleccionadaSala.id;
 
+        await validarPujaEnVivo();
+
     } catch (e) {
         mostrarToast('No se pudo cargar la sala en vivo.', 'Error', 'danger');
     }
@@ -1016,18 +1379,20 @@ function actualizarRelojSala() {
         if (timerBox) timerBox.className = 'timer-box bg-warning-subtle text-dark border-warning';
         if (antiSnipingBadge) antiSnipingBadge.className = 'd-none';
 
-        if (btnPuja) {
+        if (btnPuja && !btnPuja.classList.contains('btn-loading')) {
             btnPuja.disabled = true;
-            btnPuja.innerHTML = '<i class="fa-regular fa-clock me-2"></i> Subasta Programada (Ofertas bloqueadas hasta el inicio)';
+            const textPuja = document.getElementById('text-puja');
+            if (textPuja) textPuja.innerHTML = '<i class="fa-regular fa-clock me-2"></i> Subasta Programada';
         }
     } else if (estadoReal === 'FINALIZADA' || estadoReal === 'DESIERTA') {
         timerElem.textContent = `00:00:00 - ${estadoReal}`;
         if (timerBox) timerBox.className = 'timer-box bg-secondary border-secondary';
         if (antiSnipingBadge) antiSnipingBadge.className = 'd-none';
 
-        if (btnPuja) {
+        if (btnPuja && !btnPuja.classList.contains('btn-loading')) {
             btnPuja.disabled = true;
-            btnPuja.innerHTML = `<i class="fa-solid fa-flag-checkered me-2"></i> Subasta Concluida (${estadoReal})`;
+            const textPuja = document.getElementById('text-puja');
+            if (textPuja) textPuja.innerHTML = `<i class="fa-solid fa-flag-checkered me-2"></i> Subasta Concluida (${estadoReal})`;
         }
     } else { // ACTIVA
         const finMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
@@ -1043,11 +1408,6 @@ function actualizarRelojSala() {
         const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const secs = Math.floor((diff % (1000 * 60)) / 1000);
         timerElem.textContent = `${format(hrs)}:${format(mins)}:${format(secs)}`;
-
-        if (btnPuja) {
-            btnPuja.disabled = false;
-            btnPuja.innerHTML = '<i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja';
-        }
 
         if (diff <= 60000) {
             if (timerBox) timerBox.className = 'timer-box timer-critical-alert';
@@ -1077,20 +1437,25 @@ function configurarBotonesPujaRapida(incrementoMinimo) {
     const val3 = incrementoMinimo * 5;
 
     contenedor.innerHTML = `
-        <button type="button" class="btn btn-outline-primary-custom btn-sm" onclick="setMontoPujaSugerido(${val1})">+$${val1.toLocaleString()}</button>
-        <button type="button" class="btn btn-outline-primary-custom btn-sm" onclick="setMontoPujaSugerido(${val2})">+$${val2.toLocaleString()}</button>
-        <button type="button" class="btn btn-outline-primary-custom btn-sm" onclick="setMontoPujaSugerido(${val3})">+$${val3.toLocaleString()}</button>
+        <button type="button" class="btn btn-outline-primary-custom btn-sm" onclick="setMontoPujaSugerido(${val1})">+$${val1.toLocaleString('es-AR')}</button>
+        <button type="button" class="btn btn-outline-primary-custom btn-sm" onclick="setMontoPujaSugerido(${val2})">+$${val2.toLocaleString('es-AR')}</button>
+        <button type="button" class="btn btn-outline-primary-custom btn-sm" onclick="setMontoPujaSugerido(${val3})">+$${val3.toLocaleString('es-AR')}</button>
     `;
 
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
     const montoRecomendado = pujaActual + incrementoMinimo;
-    document.getElementById('input-monto-puja').value = montoRecomendado;
+    const inputPuja = document.getElementById('input-monto-puja');
+    if (inputPuja) inputPuja.value = montoRecomendado;
 }
 
 function setMontoPujaSugerido(offset) {
     if (!subastaSeleccionadaSala) return;
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
-    document.getElementById('input-monto-puja').value = pujaActual + offset;
+    const inputPuja = document.getElementById('input-monto-puja');
+    if (inputPuja) {
+        inputPuja.value = pujaActual + offset;
+        validarPujaEnVivo();
+    }
 }
 
 function actualizarMonitorPujasSala() {
@@ -1190,10 +1555,142 @@ function actualizarMonitorPujasSala() {
     });
 }
 
+async function validarPujaEnVivo() {
+    const inputMonto = document.getElementById('input-monto-puja');
+    const btnPuja = document.getElementById('btn-realizar-puja');
+    const textPuja = document.getElementById('text-puja');
+    const feedbackBox = document.getElementById('bid-validation-feedback');
+    const badgeMinimo = document.getElementById('puja-minima-badge');
+
+    if (!inputMonto || !btnPuja || !feedbackBox) return false;
+
+    if (!subastaSeleccionadaSala) {
+        btnPuja.disabled = true;
+        feedbackBox.classList.add('d-none');
+        return false;
+    }
+
+    const estadoReal = determinarEstadoSubasta(subastaSeleccionadaSala);
+    const precioBase = subastaSeleccionadaSala.precioBase ?? subastaSeleccionadaSala.PrecioBase ?? 0;
+    const incrementoMin = subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000;
+    const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
+    const pujas = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
+
+    const montoMinimoPermitido = pujas.length > 0 ? (pujaActual + incrementoMin) : precioBase;
+    if (badgeMinimo) {
+        badgeMinimo.textContent = `Mínimo requerido: $${montoMinimoPermitido.toLocaleString('es-AR')}`;
+    }
+
+    // 1. Validar estado de la subasta
+    if (estadoReal !== 'ACTIVA') {
+        inputMonto.disabled = true;
+        btnPuja.disabled = true;
+        if (textPuja) textPuja.innerHTML = `<i class="fa-solid fa-lock me-2"></i> Subasta ${estadoReal}`;
+        feedbackBox.className = 'validation-feedback-box alert alert-secondary py-2 small mb-0';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-lock me-1"></i> Esta subasta se encuentra <strong>${estadoReal}</strong>. No acepta nuevas ofertas en este momento.`;
+        feedbackBox.classList.remove('d-none');
+        return false;
+    }
+
+    // 2. Validar si el usuario logueado es el vendedor
+    const vendedorId = subastaSeleccionadaSala.vendedorId ?? subastaSeleccionadaSala.VendedorId;
+    if (usuarioActual && vendedorId === usuarioActual.id) {
+        inputMonto.disabled = true;
+        btnPuja.disabled = true;
+        if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-hand me-2"></i> No puedes autopujar';
+        feedbackBox.className = 'validation-feedback-box alert alert-warning py-2 small mb-0';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-hand me-1"></i> Eres el <strong>Vendedor</strong> de este artículo. Las reglas del sistema impiden que ofertes en tu propia publicación.`;
+        feedbackBox.classList.remove('d-none');
+        return false;
+    }
+
+    // Si la subasta está activa y no es el vendedor, el input está habilitado
+    inputMonto.disabled = false;
+
+    // 3. Validar si ya es el postor líder
+    let esMiPujaLider = false;
+    if (pujas.length > 0) {
+        const pujasSorted = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
+        const mayorPuja = pujasSorted[0];
+        esMiPujaLider = (mayorPuja.usuarioId ?? mayorPuja.UsuarioId) === (usuarioActual ? usuarioActual.id : null);
+    }
+
+    // 4. Validar monto ingresado
+    const montoIngresado = parseFloat(inputMonto.value);
+    if (isNaN(montoIngresado) || montoIngresado <= 0) {
+        btnPuja.disabled = true;
+        if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja';
+        feedbackBox.className = 'validation-feedback-box alert alert-light border py-1 px-2 extra-small mb-0 text-muted';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-calculator me-1"></i> Ingrese un monto de al menos <strong>$${montoMinimoPermitido.toLocaleString('es-AR')}</strong> para ofertar.`;
+        feedbackBox.classList.remove('d-none');
+        return false;
+    }
+
+    if (montoIngresado < montoMinimoPermitido) {
+        btnPuja.disabled = true;
+        if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-circle-exclamation me-2"></i> Monto Insuficiente';
+        feedbackBox.className = 'validation-feedback-box alert alert-danger py-2 small mb-0';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-circle-exclamation me-1"></i> Oferta insuficiente. El incremento mínimo es de $${incrementoMin.toLocaleString('es-AR')} (Mínimo a ofertar: <strong>$${montoMinimoPermitido.toLocaleString('es-AR')}</strong>).`;
+        feedbackBox.classList.remove('d-none');
+        return false;
+    }
+
+    // 5. Validar saldo disponible en billetera
+    let saldoDisponible = 0;
+    try {
+        const b = await fetchObtenerBilletera(usuarioActual.id);
+        saldoDisponible = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
+    } catch (_) {
+        saldoDisponible = usuarioActual.saldoInicial || 0;
+    }
+
+    if (saldoDisponible < montoIngresado) {
+        btnPuja.disabled = true;
+        if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-wallet me-2"></i> Saldo Insuficiente';
+        const faltante = montoIngresado - saldoDisponible;
+        feedbackBox.className = 'validation-feedback-box alert alert-danger py-2 small mb-0 d-flex justify-content-between align-items-center';
+        feedbackBox.innerHTML = `
+            <div>
+                <i class="fa-solid fa-wallet me-1"></i> Saldo disponible: <strong>$${saldoDisponible.toLocaleString('es-AR')}</strong>. Te faltan <strong>$${faltante.toLocaleString('es-AR')}</strong>.
+            </div>
+            <button type="button" class="btn btn-sm btn-success py-0 px-2 fw-bold extra-small" onclick="cargarSaldoLibreRapido(${Math.max(100000, Math.ceil(faltante))})">
+                <i class="fa-solid fa-plus me-1"></i>Cargar
+            </button>
+        `;
+        feedbackBox.classList.remove('d-none');
+        return false;
+    }
+
+    // Todo es válido para ofertar
+    btnPuja.disabled = false;
+    if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-bolt me-2"></i> Confirmar y Enviar Puja';
+    
+    if (esMiPujaLider) {
+        feedbackBox.className = 'validation-feedback-box alert alert-info py-1 px-2 extra-small mb-0';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-crown text-warning me-1"></i> Ya eres el postor líder. Al confirmar, tu nueva oferta de <strong>$${montoIngresado.toLocaleString('es-AR')}</strong> reemplazará la anterior en Escrow.`;
+    } else {
+        feedbackBox.className = 'validation-feedback-box alert alert-success-subtle border border-success-subtle text-success py-1 px-2 extra-small mb-0';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-shield-check me-1"></i> Oferta válida por <strong>$${montoIngresado.toLocaleString('es-AR')}</strong>. Se retendrá en garantía Escrow preventiva.`;
+    }
+    feedbackBox.classList.remove('d-none');
+    return true;
+}
+
 async function enviarPuja(event) {
     event.preventDefault();
 
     if (!subastaSeleccionadaSala) return;
+
+    // Validación preventiva en cliente antes de procesar cualquier transacción
+    const esValida = await validarPujaEnVivo();
+    if (!esValida) return;
+
+    const montoInput = parseFloat(document.getElementById('input-monto-puja').value);
+    const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
+    const incrementoMin = subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000;
+
+    // Activar estado de carga interactivo en botón de puja (previene doble clic)
+    setBotonCargando('btn-realizar-puja', 'spinner-puja', 'text-puja', true, '<i class="fa-solid fa-circle-notch fa-spin me-2"></i> Procesando puja en Escrow...');
 
     // 1. Obtener la subasta fresca de la API para asegurar que la versión esté sincronizada
     try {
@@ -1204,23 +1701,7 @@ async function enviarPuja(event) {
         console.warn("No se pudo refrescar la subasta antes de pujar, usando versión local.", e);
     }
 
-    const montoInput = parseFloat(document.getElementById('input-monto-puja').value);
-    const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
-    const incrementoMin = subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000;
-
-    // ... (el resto de tus validaciones de monto e incremento siguen exactamente igual)
-
-    if (isNaN(montoInput) || montoInput <= pujaActual) {
-        mostrarToast(`La puja debe superar la oferta actual de $${pujaActual.toLocaleString('es-AR')}.`, 'Oferta Inválida', 'warning');
-        return;
-    }
-
     const pujasPrevias = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
-    if ((montoInput - pujaActual) < incrementoMin && pujasPrevias.length > 0) {
-        mostrarToast(`El incremento mínimo requerido es de $${incrementoMin.toLocaleString('es-AR')}.`, 'Incremento Insuficiente', 'warning');
-        return;
-    }
-
     let retencionRealizada = false;
     let liberacionMismoUsuarioRealizada = false;
     let liberacionOtroUsuarioRealizada = false;
@@ -1346,18 +1827,36 @@ async function enviarPuja(event) {
         await cargarLogsAuditoria();
         if (err.status === 400 || err.status === 422 || (err.message && err.message.toLowerCase().includes('saldo insuficiente'))) {
             abrirModalSaldoInsuficiente(montoInput);
-        } else if (err.status === 409) {
+        } else if (err.status === 409 || err.isConflict) {
+            // Manejo específico de concurrencia optimista (HTTP 409 Conflict)
             try {
                 const subFresca = await fetchObtenerSubastaPorId(subastaSeleccionadaSala.id);
                 subastaSeleccionadaSala.version = subFresca.version ?? subFresca.Version ?? 1;
                 subastaSeleccionadaSala.pujas = subFresca.pujas ?? subFresca.Pujas ?? [];
+                subastaSeleccionadaSala.fechaFin = subFresca.fechaFin ?? subFresca.FechaFin;
+                
+                // Refrescar caché y tarjetas
+                const idx = subastasCache.findIndex(s => (s.id ?? s.Id) === subastaSeleccionadaSala.id);
+                if (idx !== -1) {
+                    subastasCache[idx] = { ...subastasCache[idx], ...subFresca };
+                }
+
                 actualizarMonitorPujasSala();
                 actualizarTarjetasCatalogo();
-            } catch {}
-            abrirModalConcurrenciaOptimista();
+                configurarBotonesPujaRapida(subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000);
+            } catch (eRefresh) {
+                console.warn("No se pudo refrescar automáticamente la subasta tras conflicto 409:", eRefresh);
+            }
+
+            // Mostrar Banner Flotante no intrusivo y Toast
+            mostrarBannerConcurrencia(`⚡ <strong>Tu puja ha sido superada por otra transacción reciente.</strong> Los datos de la sala se han actualizado automáticamente.`);
+            mostrarToast('Tu puja ha sido superada por otra transacción reciente. Monto actualizado.', 'Conflicto de Concurrencia (409)', 'warning');
         } else {
             mostrarToast(`No se pudo procesar la puja: ${err.message}`, 'Error de Operación', 'danger');
         }
+    } finally {
+        setBotonCargando('btn-realizar-puja', 'spinner-puja', 'text-puja', false);
+        await validarPujaEnVivo();
     }
 }
 
@@ -1366,6 +1865,7 @@ async function enviarPuja(event) {
    ========================================================================== */
 
 async function actualizarBilleteraUI() {
+    renderizarSkeletonsBilletera(3);
     try {
         const billetera = await fetchObtenerBilletera(usuarioActual.id);
         const movimientos = await fetchObtenerMovimientos(usuarioActual.id);
@@ -1405,8 +1905,8 @@ async function actualizarBilleteraUI() {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><span class="badge ${tipoInfo.badge}">${tipoInfo.nombre}</span></td>
-                <td class="fw-bold ${tipoInfo.esPositivo ? 'text-success' : 'text-dark'}">
-                    ${tipoInfo.esPositivo ? '+' : '-'}$${m.monto.toLocaleString()}
+                <td class="fw-bold font-monospace ${tipoInfo.esPositivo ? 'text-success' : 'text-danger'}">
+                    ${tipoInfo.esPositivo ? '+' : '-'}$${m.monto.toLocaleString('es-AR')}
                 </td>
                 <td><small class="text-muted">${fechaStr}</small></td>
                 <td>${m.concepto || (m.subastaId ? `Subasta #${m.subastaId}` : 'Operación General')}</td>
@@ -1440,9 +1940,11 @@ async function procesarCargaSaldoModal(event) {
         return;
     }
 
+    setBotonCargando('btn-modal-cargar-saldo', 'spinner-cargar', 'text-cargar', true, '<i class="fa-solid fa-circle-notch fa-spin me-1"></i> Acreditando...');
+
     try {
         await fetchCargarSaldo(usuarioActual.id, monto);
-        mostrarToast(`¡Se han acreditado $${monto.toLocaleString()} libremente a la cuenta de ${usuarioActual.nombre}!`, 'Acreditación Exitosa', 'success');
+        mostrarToast(`¡Se han acreditado <strong>+$${monto.toLocaleString('es-AR')}</strong> libremente a la cuenta de ${usuarioActual.nombre}!`, 'Acreditación Exitosa', 'success');
 
         const modalElem = document.getElementById('modalCargarSaldo');
         const modal = bootstrap.Modal.getInstance(modalElem);
@@ -1453,43 +1955,58 @@ async function procesarCargaSaldoModal(event) {
         await actualizarBilleteraUI();
         await renderizarSelectorPerfilesSemilla();
         await cargarLogsAuditoria();
+        if (subastaSeleccionadaSala) {
+            await validarPujaEnVivo();
+        }
 
     } catch (err) {
         mostrarToast(`Error al cargar saldo: ${err.message}`, 'Error', 'danger');
+    } finally {
+        setBotonCargando('btn-modal-cargar-saldo', 'spinner-cargar', 'text-cargar', false);
     }
 }
 
 async function procesarRetencionManual(event) {
     event.preventDefault();
     const monto = parseFloat(document.getElementById('test-retener-monto').value);
-    const subastaId = parseInt(document.getElementById('test-retener-subastaId').value) || 101;
+    const subastaId = parseInt(document.getElementById('test-retener-subastaId').value) || 1;
+
+    setBotonCargando('btn-test-retener', 'spinner-test-retener', 'text-test-retener', true, 'Reteniendo...');
 
     try {
         await fetchRetenerSaldo(usuarioActual.id, monto, subastaId);
-        mostrarToast(`Saldo de $${monto.toLocaleString()} retenido preventivamente en Escrow.`, 'Retención Ejecutada', 'info');
+        mostrarToast(`Saldo de $${monto.toLocaleString('es-AR')} retenido preventivamente en Escrow.`, 'Retención Ejecutada', 'info');
         await actualizarBilleteraUI();
         await sincronizarSaldosDropdown();
+        if (subastaSeleccionadaSala) await validarPujaEnVivo();
     } catch (e) {
-        if (e.status === 400 || e.status === 422 || e.message.includes('saldo insuficiente')) {
+        if (e.status === 400 || e.status === 422 || (e.message && e.message.includes('saldo insuficiente'))) {
             abrirModalSaldoInsuficiente(monto);
         } else {
             mostrarToast(e.message, 'Error', 'danger');
         }
+    } finally {
+        setBotonCargando('btn-test-retener', 'spinner-test-retener', 'text-test-retener', false);
     }
 }
 
 async function procesarLiberacionManual(event) {
     event.preventDefault();
     const monto = parseFloat(document.getElementById('test-liberar-monto').value);
-    const subastaId = parseInt(document.getElementById('test-liberar-subastaId').value) || 101;
+    const subastaId = parseInt(document.getElementById('test-liberar-subastaId').value) || 1;
+
+    setBotonCargando('btn-test-liberar', 'spinner-test-liberar', 'text-test-liberar', true, 'Liberando...');
 
     try {
         await fetchLiberarSaldo(usuarioActual.id, monto, subastaId);
-        mostrarToast(`Saldo de $${monto.toLocaleString()} liberado de Escrow.`, 'Fondos Liberados', 'success');
+        mostrarToast(`Saldo de $${monto.toLocaleString('es-AR')} liberado de Escrow.`, 'Fondos Liberados', 'success');
         await actualizarBilleteraUI();
         await sincronizarSaldosDropdown();
+        if (subastaSeleccionadaSala) await validarPujaEnVivo();
     } catch (e) {
         mostrarToast(e.message, 'Error', 'danger');
+    } finally {
+        setBotonCargando('btn-test-liberar', 'spinner-test-liberar', 'text-test-liberar', false);
     }
 }
 
@@ -1498,9 +2015,16 @@ async function procesarCrearUsuario(event) {
     const nombre = document.getElementById('modal-usuario-nombre').value.trim();
     const email = document.getElementById('modal-usuario-email').value.trim();
 
+    if (!nombre || !email) {
+        mostrarToast('Complete el nombre y correo electrónico.', 'Campos Requeridos', 'warning');
+        return;
+    }
+
+    setBotonCargando('btn-modal-usuario', 'spinner-usuario', 'text-usuario', true, '<i class="fa-solid fa-circle-notch fa-spin me-1"></i> Registrando...');
+
     try {
         const res = await fetchCrearUsuario(nombre, email);
-        mostrarToast(res.mensaje, 'Usuario Creado', 'success');
+        mostrarToast(res.mensaje || 'Usuario y billetera creados correctamente', 'Usuario Creado', 'success');
 
         const nuevoPerfil = {
             id: res.usuarioId || Date.now(),
@@ -1511,14 +2035,17 @@ async function procesarCrearUsuario(event) {
         };
 
         PERFILES_SEMILLA.push(nuevoPerfil);
-        await cambiarPerfilSemilla(nuevoPerfil.id);
+        await iniciarSesion(nuevoPerfil);
 
         const modalElem = document.getElementById('modalCrearUsuario');
         const modal = bootstrap.Modal.getInstance(modalElem);
         if (modal) modal.hide();
+        document.getElementById('form-modal-usuario').reset();
 
     } catch (e) {
         mostrarToast(`Error al crear usuario: ${e.message}`, 'Error', 'danger');
+    } finally {
+        setBotonCargando('btn-modal-usuario', 'spinner-usuario', 'text-usuario', false);
     }
 }
 
@@ -1698,7 +2225,7 @@ async function cargarMisActividades() {
                 <i class="fa-solid fa-store fa-2x mb-2 text-secondary opacity-50"></i>
                 <p class="mb-1 fw-bold">Sin publicaciones con ${usuarioActual.nombre}</p>
                 <p class="extra-small mb-3">No tienes artículos publicados a subasta como vendedor.</p>
-                <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-crear').click()">
+                <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-publicar').click()">
                     <i class="fa-solid fa-plus me-1"></i>Publicar una Subasta
                 </button>
             </div>
@@ -1735,8 +2262,83 @@ async function abrirModalSaldoInsuficiente(montoRequerido) {
 
 function abrirModalConcurrenciaOptimista() {
     const modalElem = document.getElementById('modalConcurrencia');
-    const modal = new bootstrap.Modal(modalElem);
-    modal.show();
+    if (modalElem) {
+        const modal = new bootstrap.Modal(modalElem);
+        modal.show();
+    }
+}
+
+function mostrarBannerConcurrencia(mensajeHtml) {
+    const banner = document.getElementById('sala-banner-concurrencia');
+    if (!banner) return;
+
+    banner.className = 'concurrency-alert-banner alert alert-warning d-flex align-items-center justify-content-between p-3 mb-3 shadow-sm';
+    banner.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fa-solid fa-bolt-lightning text-warning fs-3 me-3"></i>
+            <div>${mensajeHtml}</div>
+        </div>
+        <button type="button" class="btn-close ms-2" onclick="this.parentElement.classList.add('d-none')" aria-label="Cerrar"></button>
+    `;
+    banner.classList.remove('d-none');
+
+    // Auto-ocultar después de 9 segundos
+    setTimeout(() => {
+        if (banner) banner.classList.add('d-none');
+    }, 9000);
+}
+
+/** Función para probar desde DevTools la respuesta y recuperación frente a un 409 Conflict */
+async function simularColisionConcurrencia() {
+    if (!subastaSeleccionadaSala) {
+        mostrarToast('Primero selecciona una subasta en la Sala en Vivo.', 'DevTools', 'info');
+        document.getElementById('tab-sala')?.click();
+        return;
+    }
+
+    mostrarToast('Simulando colisión de versión concurrente (HTTP 409)...', 'DevTools', 'warning');
+    
+    // Simular oferta simultánea de otro postor
+    const anonNuevo = `Postor #${Math.floor(Math.random() * 900 + 100).toString(16).toUpperCase()}`;
+    const montoSimulado = obtenerPujaMaxima(subastaSeleccionadaSala) + 10000;
+    
+    if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
+    subastaSeleccionadaSala.pujas.push({
+        id: Date.now(),
+        subastaId: subastaSeleccionadaSala.id,
+        usuarioId: 99,
+        monto: montoSimulado,
+        fechaCreacion: new Date().toISOString(),
+        postorAnonimo: anonNuevo
+    });
+    subastaSeleccionadaSala.version = (subastaSeleccionadaSala.version || 1) + 1;
+
+    actualizarMonitorPujasSala();
+    actualizarTarjetasCatalogo();
+    configurarBotonesPujaRapida(subastaSeleccionadaSala.incrementoMinimo || 5000);
+
+    mostrarBannerConcurrencia(`⚡ <strong>Tu puja ha sido superada por otra transacción reciente.</strong> La sala se actualizó con la oferta de ${anonNuevo} por $${montoSimulado.toLocaleString('es-AR')}.`);
+    mostrarToast('Conflicto 409 simulado. La sala se sincronizó automáticamente sin recargar.', 'Simulación Exitosa', 'warning');
+}
+
+async function testearConexionApiDevTools() {
+    const devBadge = document.getElementById('devtools-api-status');
+    const devUrl = document.getElementById('devtools-api-url');
+    if (devUrl) devUrl.textContent = ApiClient.baseURL;
+
+    if (devBadge) {
+        devBadge.className = 'api-status-badge badge bg-secondary text-white';
+        devBadge.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Probando...';
+    }
+
+    try {
+        await apiFetch('/Categorias');
+        mostrarToast(`Conexión exitosa a la API (${ApiClient.baseURL})`, 'DevTools Ping', 'success');
+        updateApiConnectionStatus(true);
+    } catch (e) {
+        mostrarToast(`Fallo al conectar: ${e.message}`, 'DevTools Ping Fallido', 'danger');
+        updateApiConnectionStatus(false);
+    }
 }
 
 /* ==========================================================================
@@ -1774,6 +2376,41 @@ function configurarEventosUI() {
     if (urlInput && previewImg) {
         urlInput.addEventListener('input', () => {
             previewImg.src = urlInput.value.trim() || 'assets/images/watch.png';
+        });
+    }
+
+    // Sincronización Reactiva en Tiempo Real del Formulario Crear Subasta
+    const inputTitulo = document.getElementById('crear-titulo');
+    const previewTitulo = document.getElementById('crear-preview-titulo');
+    if (inputTitulo && previewTitulo) {
+        inputTitulo.addEventListener('input', () => {
+            previewTitulo.textContent = inputTitulo.value.trim() || 'Título de tu subasta';
+        });
+    }
+
+    const selectCat = document.getElementById('crear-categoriaId');
+    const previewCat = document.getElementById('crear-preview-categoria');
+    if (selectCat && previewCat) {
+        selectCat.addEventListener('change', () => {
+            const catNombre = selectCat.options[selectCat.selectedIndex]?.text || 'Previsualización';
+            previewCat.textContent = catNombre.startsWith('Seleccione') ? 'Previsualización' : catNombre;
+        });
+    }
+
+    const inputDesc = document.getElementById('crear-descripcion');
+    const previewDesc = document.getElementById('crear-preview-descripcion');
+    if (inputDesc && previewDesc) {
+        inputDesc.addEventListener('input', () => {
+            previewDesc.textContent = inputDesc.value.trim() || 'Descripción de la publicación...';
+        });
+    }
+
+    const inputBase = document.getElementById('crear-precioBase');
+    const previewBase = document.getElementById('crear-preview-precio');
+    if (inputBase && previewBase) {
+        inputBase.addEventListener('input', () => {
+            const val = parseFloat(inputBase.value) || 0;
+            previewBase.textContent = `$${val.toLocaleString('es-AR')}`;
         });
     }
 
@@ -1962,4 +2599,115 @@ async function forzarEjecucionWorker() {
         mostrarToast('Error al forzar la ejecución del worker.', 'Error Worker', 'danger');
     }
 }
+
+/** Alias del botón DevTools para el Background Worker */
+async function ejecutarBackgroundWorkerManual() {
+    return forzarEjecucionWorker();
+}
+
+/* ==========================================================================
+   MÓDULO DE LOGIN CON CONTRASEÑA POR PERFIL
+   ========================================================================== */
+
+let _perfilSeleccionadoParaLogin = null;
+
+/**
+ * Muestra el recuadro de confirmación de contraseña para el perfil elegido.
+ * Llamado al hacer clic en una tarjeta de perfil del login.
+ */
+function seleccionarPerfilParaLogin(perfilId) {
+    _perfilSeleccionadoParaLogin = PERFILES_SEMILLA.find(p => p.id === perfilId) || null;
+    if (!_perfilSeleccionadoParaLogin) return;
+
+    const box = document.getElementById('login-perfil-password-box');
+    const avatarEl = document.getElementById('login-perfil-avatar-confirm');
+    const nombreEl = document.getElementById('login-perfil-nombre-confirm');
+    const emailEl = document.getElementById('login-perfil-email-confirm');
+    const pwInput = document.getElementById('login-perfil-password');
+    const errorEl = document.getElementById('login-perfil-error');
+
+    if (avatarEl) avatarEl.textContent = obtenerIniciales(_perfilSeleccionadoParaLogin.nombre);
+    if (nombreEl) nombreEl.textContent = _perfilSeleccionadoParaLogin.nombre;
+    if (emailEl) emailEl.textContent = _perfilSeleccionadoParaLogin.email;
+    if (pwInput) pwInput.value = '';
+    if (errorEl) errorEl.classList.add('d-none');
+    if (box) box.classList.remove('d-none');
+}
+
+/**
+ * Confirma el login del perfil seleccionado validando la contraseña (1234 para pruebas).
+ */
+async function confirmarLoginPerfil() {
+    if (!_perfilSeleccionadoParaLogin) return;
+
+    const pwInput = document.getElementById('login-perfil-password');
+    const errorEl = document.getElementById('login-perfil-error');
+    const errorText = document.getElementById('login-perfil-error-text');
+    const pw = pwInput ? pwInput.value : '';
+
+    // Para los perfiles de prueba la contraseña universal es "1234" (o vacía para bypass directo)
+    if (pw !== '1234' && pw !== '') {
+        if (errorEl && errorText) {
+            errorText.textContent = 'Contraseña incorrecta. Los perfiles de prueba usan "1234".';
+            errorEl.classList.remove('d-none');
+        }
+        return;
+    }
+
+    setBotonCargando('btn-login-perfil-confirmar', 'spinner-login-perfil', 'text-login-perfil', true,
+        '<i class="fa-solid fa-circle-notch fa-spin me-2"></i> Ingresando...');
+
+    try {
+        await iniciarSesion(_perfilSeleccionadoParaLogin);
+        _perfilSeleccionadoParaLogin = null;
+        cancelarSeleccionPerfil();
+    } catch (e) {
+        if (errorEl && errorText) {
+            errorText.textContent = e.message || 'Error al iniciar sesión.';
+            errorEl.classList.remove('d-none');
+        }
+    } finally {
+        setBotonCargando('btn-login-perfil-confirmar', 'spinner-login-perfil', 'text-login-perfil', false);
+    }
+}
+
+/**
+ * Cancela la selección de perfil y vuelve a la grilla de selección.
+ */
+function cancelarSeleccionPerfil() {
+    _perfilSeleccionadoParaLogin = null;
+    const box = document.getElementById('login-perfil-password-box');
+    if (box) box.classList.add('d-none');
+    const errorEl = document.getElementById('login-perfil-error');
+    if (errorEl) errorEl.classList.add('d-none');
+}
+
+/**
+ * Alterna visibilidad de la contraseña en el panel de confirmación de perfil.
+ */
+function togglePwVisibilityPerfil() {
+    const input = document.getElementById('login-perfil-password');
+    const btn = document.getElementById('btn-toggle-pw-perfil');
+    if (!input) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+    } else {
+        input.type = 'password';
+        if (btn) btn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+    }
+}
+
+/**
+ * Alterna visibilidad de la contraseña en el formulario de credenciales (email/password).
+ */
+function togglePwVisibilityCredenciales() {
+    const input = document.getElementById('login-input-password');
+    if (!input) return;
+    input.type = (input.type === 'password') ? 'text' : 'password';
+}
+
+/* ==========================================================================
+   FIN DEL MÓDULO APP.JS
+   ========================================================================== */
 

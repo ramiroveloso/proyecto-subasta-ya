@@ -3,11 +3,6 @@
  * Endpoint Backend ASP.NET Core: https://localhost:65102/api
  */
 
-let API_BASE = (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http') && window.location.port)
-    ? `${window.location.origin}/api`
-    : 'https://localhost:65102/api';
-let isBackendConnected = true;
-
 
 // Perfiles del sistema: se cargan dinámicamente desde el backend o se usa el seed local como respaldo
 let PERFILES_SEMILLA = [
@@ -213,75 +208,203 @@ let MOCK_BILLETERAS = {
     }
 };
 
-async function apiFetch(endpoint, options = {}) {
-    try {
-        return await executeFetch(API_BASE, endpoint, options);
-    } catch (error) {
-        if (error.status) {
-            throw error;
+// Configuración de Entornos (Dev vs Prod)
+const ENV_CONFIG = {
+    isDev: (typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')
+    )),
+    showDevBadges: false, // Por defecto ocultos en la interfaz pública según requerimiento
+    endpoints: {
+        devPrimary: 'https://localhost:65102/api',
+        devAlternative: 'http://localhost:65103/api',
+        relative: (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http') && window.location.port)
+            ? `${window.location.origin}/api`
+            : 'https://localhost:65102/api'
+    }
+};
+
+let API_BASE = ENV_CONFIG.endpoints.relative;
+let isBackendConnected = true;
+
+/**
+ * Cliente HTTP Centralizado con arquitectura de Interceptores y Manejo Global de Errores
+ */
+class HttpInterceptorClient {
+    constructor(baseURL) {
+        this.baseURL = baseURL;
+        this.requestInterceptors = [];
+        this.responseInterceptors = [];
+    }
+
+    addRequestInterceptor(fn) {
+        this.requestInterceptors.push(fn);
+    }
+
+    addResponseInterceptor(onSuccess, onError) {
+        this.responseInterceptors.push({ onSuccess, onError });
+    }
+
+    async request(endpoint, options = {}) {
+        let config = {
+            url: `${this.baseURL}${endpoint}`,
+            method: options.method || 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                ...(options.headers || {})
+            },
+            ...options
+        };
+
+        // Ejecutar Interceptores de Request
+        for (const interceptor of this.requestInterceptors) {
+            config = await interceptor(config);
         }
-        // Fallback automático si HTTPS localhost falla por certificado autofirmado
-        if (API_BASE.startsWith('https://localhost:65102')) {
-            try {
-                const altBase = 'http://localhost:65103/api';
-                const res = await executeFetch(altBase, endpoint, options);
-                API_BASE = altBase;
-                return res;
-            } catch (_) {}
+
+        const controller = new AbortController();
+        const timeoutMs = options.timeout || 7000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await fetch(config.url, {
+                method: config.method,
+                headers: config.headers,
+                body: config.body,
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            let data = null;
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                try {
+                    data = await response.json();
+                } catch (_) {
+                    data = null;
+                }
+            } else {
+                try {
+                    data = await response.text();
+                } catch (_) {}
+            }
+
+            if (!response.ok) {
+                const errorObj = {
+                    status: response.status,
+                    statusText: response.statusText,
+                    message: (data && (data.mensaje || data.message || data.title))
+                        ? (data.mensaje || data.message || data.title)
+                        : (typeof data === 'string' && data ? data : `Error HTTP ${response.status}: ${response.statusText}`),
+                    details: data,
+                    isConflict: response.status === 409,
+                    isBadRequest: response.status === 400 || response.status === 422,
+                    isNotFound: response.status === 404
+                };
+                throw errorObj;
+            }
+
+            // Ejecutar interceptores de respuesta exitosa
+            let finalData = data;
+            for (const interceptor of this.responseInterceptors) {
+                if (interceptor.onSuccess) {
+                    finalData = await interceptor.onSuccess(finalData, response);
+                }
+            }
+
+            updateApiConnectionStatus(true);
+            return finalData;
+
+        } catch (error) {
+            clearTimeout(timeoutId);
+
+            // Interceptores de error
+            let interceptedError = error;
+            for (const interceptor of this.responseInterceptors) {
+                if (interceptor.onError) {
+                    try {
+                        interceptedError = await interceptor.onError(interceptedError);
+                    } catch (e) {
+                        interceptedError = e;
+                    }
+                }
+            }
+
+            if (interceptedError.name === 'AbortError') {
+                interceptedError = {
+                    status: 408,
+                    message: 'Tiempo de espera agotado (Timeout) al comunicar con el servidor.',
+                    isTimeout: true
+                };
+            }
+
+            throw interceptedError;
         }
-        console.warn(`[SubastaYa API] No se pudo conectar a ${API_BASE}${endpoint}. Ejecutando en Modo Simulación Local.`, error);
-        updateApiConnectionStatus(false);
-        throw { status: 0, message: 'Backend fuera de línea (Modo Simulación Local)' };
     }
 }
 
-async function executeFetch(baseUrl, endpoint, options = {}) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    
-    const response = await fetch(`${baseUrl}${endpoint}`, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(options.headers || {})
-        }
-    });
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) {
-        let errorText = '';
-        let errorJson = null;
-        try {
-            errorText = await response.text();
-            errorJson = JSON.parse(errorText);
-        } catch (_) {}
+const ApiClient = new HttpInterceptorClient(API_BASE);
 
-        const errorObj = {
-            status: response.status,
-            message: (errorJson && (errorJson.mensaje || errorJson.message || errorJson.title)) 
-                ? (errorJson.mensaje || errorJson.message || errorJson.title)
-                : (errorText || `Error HTTP ${response.status}`),
-            details: errorJson
-        };
-        throw errorObj;
+// Inyector global de Headers / Metadatos en Request
+ApiClient.addRequestInterceptor(async (config) => {
+    // Si hay usuario logueado, inyectamos identificación de cliente
+    if (typeof usuarioActual !== 'undefined' && usuarioActual && usuarioActual.id) {
+        config.headers['X-Usuario-Id'] = String(usuarioActual.id);
     }
-    
-    updateApiConnectionStatus(true);
-    return await response.json();
+    return config;
+});
+
+// Interceptor global de captura de errores y fallback local
+async function apiFetch(endpoint, options = {}) {
+    try {
+        return await ApiClient.request(endpoint, options);
+    } catch (error) {
+        if (error.status && error.status !== 0 && error.status !== 408) {
+            // Errores con respuesta del servidor (400, 404, 409, etc.) se propagan inmediatamente
+            throw error;
+        }
+
+        // Intento de fallback automático si HTTPS local falla
+        if (ApiClient.baseURL.startsWith('https://localhost:65102')) {
+            try {
+                const altBase = ENV_CONFIG.endpoints.devAlternative;
+                ApiClient.baseURL = altBase;
+                API_BASE = altBase;
+                return await ApiClient.request(endpoint, options);
+            } catch (_) {}
+        }
+
+        if (ENV_CONFIG.isDev) {
+            console.warn(`[SubastaYa ApiClient] Servidor no responde en ${ApiClient.baseURL}${endpoint}. Operando en Modo Simulación Local.`, error);
+        }
+        updateApiConnectionStatus(false);
+        throw { status: 0, message: 'Servidor fuera de línea (Modo Simulación Local activado)' };
+    }
 }
 
 function updateApiConnectionStatus(connected) {
     isBackendConnected = connected;
     const badge = document.getElementById('api-status-badge');
-    if (badge) {
+    const devBadge = document.getElementById('devtools-api-status');
+
+    const updateElement = (elem) => {
+        if (!elem) return;
         if (connected) {
-            badge.className = 'api-status-badge badge bg-success text-white';
-            badge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> API Conectada (https://localhost:65102)';
+            elem.className = 'api-status-badge badge bg-success text-white';
+            elem.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> API Conectada';
         } else {
-            badge.className = 'api-status-badge badge bg-warning text-dark';
-            badge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Modo Simulación Local';
+            elem.className = 'api-status-badge badge bg-warning text-dark';
+            elem.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i> Simulación Local';
         }
+    };
+
+    updateElement(badge);
+    updateElement(devBadge);
+
+    // Si no está habilitado mostrar badges técnicos en UI pública, ocultar badge del navbar
+    if (badge && !ENV_CONFIG.showDevBadges) {
+        badge.classList.add('d-none');
     }
 }
 
