@@ -190,7 +190,7 @@ using (var scope = app.Services.CreateScope())
                 Id = 5,
                 VendedorId = 1,
                 CategoriaId = 4,
-                Titulo = "Repuesto Clásico de Vehículo",
+                Titulo = "Reloj Inteligente (Smartwatch) Premium con Correa de Eslabones Metálicos",
                 Descripcion = "Sin ofertas registradas",
                 UrlImagen = "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500",
                 PrecioBase = 80000.00m,
