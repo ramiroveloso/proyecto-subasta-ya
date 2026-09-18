@@ -227,8 +227,8 @@ La interfaz de usuario basada en Single Page Application (SPA) se configuró par
 
 ### 🔗 Enlaces de Acceso Producción
 
-* **Interfaz Web (Frontend en Vercel):** [https://proyecto-subasta-ya.vercel.app](https://www.google.com/search?q=https://proyecto-subasta-ya.vercel.app&utm_source=gemini)
-* **API REST / Documentación (Backend en Render):** [https://proyecto-subasta-ya.onrender.com](https://proyecto-subasta-ya.onrender.com?utm_source=gemini)
+* **Interfaz Web (Frontend en Vercel):** [https://ramiroveloso-proyecto-subasta-ya.vercel.app/]
+* **API REST / Documentación (Backend en Render):** [https://proyecto-subasta-ya.onrender.com]
 
 ---
 
