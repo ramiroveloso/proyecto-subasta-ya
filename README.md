@@ -1,5 +1,5 @@
 
-# SubastaYa 🚀
+# SubastaYa 
 
 Sistema de subastas en línea desarrollado bajo los principios de **Arquitectura Limpia (Clean Architecture)** y **Entity Framework Core Code-First**, implementado como proyecto de integración tecnológica.
 
@@ -168,3 +168,68 @@ Al ejecutar el script en la terminal, se obtuvo la siguiente traza de respuestas
 
 
 **Conclusión de la prueba**: El sistema responde correctamente ante situaciones de alta concurrencia, protegiendo la regla de negocio y asegurando que ninguna puja sobreescriba de manera silenciosa los cambios de otro usuario.
+
+¡Excelente iniciativa! Documentar el proceso de despliegue en el `README.md` después de hacer el merge a `main` le dará un valor agregado enorme al proyecto frente al docente, demostrando un enfoque profesional de ingeniería de software DevOps.
+
+Aquí tienes una propuesta completa y redactada con terminología técnica precisa para que puedas copiar, adaptar y pegar directamente en tu archivo `README.md`:
+
+---
+
+## 🚀 Despliegue en la Nube (Cloud Deployment)
+
+La arquitectura de **SubastaYa** se encuentra desplegada en un entorno cloud híbrido y desacoplado, separando la infraestructura del Backend, el Frontend y la Base de Datos para garantizar alta disponibilidad y rendimiento:
+
+* **Backend (API REST ASP.NET Core):** Alojado en **Render** mediante un contenedor Docker optimizado.
+* **Frontend (SPA - HTML/JS/CSS):** Distribuido a través de la CDN global de **Vercel**.
+* **Base de datos Relacional (MySQL):** Gestionada en el servicio cloud administrado de **Aiven**.
+
+---
+
+### 1. Configuración y Despliegue del Backend (Render + Docker)
+
+Para empaquetar y desplegar la API desarrollada en ASP.NET Core bajo Clean Architecture, se implementó un archivo **`Dockerfile`** en la raíz del repositorio. Este contenedor compila la solución y expone el servicio en el puerto correspondiente:
+
+1. **Creación del Web Service en Render:**
+* Se conectó el repositorio de GitHub seleccionando la rama de producción.
+* Se configuró el entorno como **Docker** (Render detecta automáticamente el `Dockerfile` raíz).
+* El comando de inicio (*Start Command*) se dejó en blanco, ya que el contenedor ejecuta nativamente el `ENTRYPOINT` apuntando a `PROYECTO_SUBASTA.Api.dll`.
+
+
+2. **Variables de Entorno configuradas en Render:**
+* `ASPNETCORE_ENVIRONMENT`: `Production`
+* `ConnectionStrings__DefaultConnection`: Cadena de conexión segura hacia la base de datos MySQL en Aiven (con `SslMode=Required`).
+
+
+
+---
+
+### 2. Configuración y Despliegue del Frontend (Vercel)
+
+La interfaz de usuario basada en Single Page Application (SPA) se configuró para consumir los endpoints públicos de la API en la nube:
+
+1. **Despliegue estático:**
+* Conectado directamente al repositorio en Vercel, optimizando la compilación de archivos estáticos.
+
+
+2. **Integración con la API:**
+* Se ajustó la capa de servicios (`api.js`) para apuntar las peticiones HTTP directamente a la URL pública del backend en Render, permitiendo la comunicación segura mediante HTTPS de punta a punta.
+
+
+
+---
+
+### 3. Conectividad y Base de Datos (Aiven MySQL)
+
+* **Servidor:** Instancia MySQL gestionada en la nube de Aiven con cifrado SSL obligatorio (`SslMode=Required`).
+* **Migraciones:** Aplicadas mediante Entity Framework Core utilizando migraciones estructuradas para poblar esquemas, catálogos y datos iniciales de prueba (incluyendo los perfiles con rol `ADMIN`).
+
+---
+
+### 🔗 Enlaces de Acceso Producción
+
+* **Interfaz Web (Frontend en Vercel):** [https://proyecto-subasta-ya.vercel.app](https://www.google.com/search?q=https://proyecto-subasta-ya.vercel.app&utm_source=gemini)
+* **API REST / Documentación (Backend en Render):** [https://proyecto-subasta-ya.onrender.com](https://proyecto-subasta-ya.onrender.com?utm_source=gemini)
+
+---
+
+¡Mucho éxito con ese merge y la presentación final ante el docente! Tienen un producto sumamente sólido y bien estructurado.
