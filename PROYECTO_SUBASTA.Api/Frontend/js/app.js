@@ -60,15 +60,21 @@ async function iniciarSesion(usuario) {
         id: usuario.id ?? usuario.Id,
         nombre: usuario.nombre ?? usuario.Nombre,
         email: usuario.email ?? usuario.Email,
+        rol: usuario.rol ?? usuario.Rol ?? ((usuario.id === 99 || (usuario.email || '').toLowerCase() === 'admin@subastaya.com') ? 'ADMIN' : undefined),
         saldoInicial: usuario.saldoInicial ?? 0
     };
     guardarSesion(usuarioActual);
     ocultarModalLogin();
 
+    actualizarVisibilidadAuditoria();
     await renderizarSelectorPerfilesSemilla();
     await actualizarBilleteraUI();
     actualizarTarjetasCatalogo();
     await cargarMisActividades();
+
+    if (usuarioActual && usuarioActual.rol === 'ADMIN') {
+        await cargarLogsAuditoria();
+    }
 
     if (subastaSeleccionadaSala) {
         actualizarMonitorPujasSala();
@@ -82,14 +88,40 @@ async function iniciarSesion(usuario) {
 function cerrarSesion() {
     borrarSesion();
     usuarioActual = null;
+    actualizarVisibilidadAuditoria();
+
+    // Limpiar UI del usuario en navbar superior y dropdown
+    const navAvatar = document.getElementById('nav-user-avatar');
+    if (navAvatar) navAvatar.textContent = '--';
+    const userInfo = document.getElementById('wallet-usuario-info');
+    if (userInfo) userInfo.textContent = 'Sin Sesión';
+    const userEmail = document.getElementById('wallet-usuario-email');
+    if (userEmail) userEmail.textContent = 'Inicie sesión';
+    const navBadge = document.getElementById('nav-user-saldo');
+    if (navBadge) {
+        navBadge.textContent = '$0';
+        navBadge.className = 'badge bg-secondary font-monospace ms-1';
+    }
+    const dropdownMenu = document.getElementById('dropdown-perfiles-semilla');
+    if (dropdownMenu) {
+        dropdownMenu.innerHTML = `
+            <li class="p-3 text-center text-muted small">
+                <i class="fa-solid fa-user-slash d-block fs-4 mb-2 text-secondary"></i>
+                No hay una sesión activa.
+            </li>
+        `;
+    }
+
     mostrarModalLogin();
     mostrarToast('Has cerrado la sesión de forma segura.', 'Sesión Finalizada', 'info');
 }
 
 function obtenerRolUsuario(usuario) {
     if (!usuario) return 'Usuario';
+    if (usuario.rol === 'ADMIN' || usuario.Rol === 'ADMIN' || usuario.id === 99 || (usuario.email || '').toLowerCase() === 'admin@subastaya.com') return 'Administrador';
     const email = (usuario.email || '').toLowerCase();
     const nombre = (usuario.nombre || '').toLowerCase();
+    if (email.includes('admin') || nombre.includes('administrador')) return 'Administrador';
     if (email.includes('vendedor') || nombre.includes('vendedor')) return 'Vendedor';
     if (email.includes('comprador1') || nombre.includes('líder') || nombre.includes('lider')) return 'Comprador Líder';
     if (email.includes('comprador2') || nombre.includes('habilitado')) return 'Comprador Habilitado';
@@ -125,8 +157,18 @@ async function cargarPerfilesEnLogin() {
                 id: u.id ?? u.Id,
                 nombre: u.nombre ?? u.Nombre,
                 email: u.email ?? u.Email,
-                saldoInicial: 0
+                rol: u.rol ?? u.Rol ?? ((u.id === 99 || u.Id === 99 || (u.email || u.Email || '').toLowerCase() === 'admin@subastaya.com') ? 'ADMIN' : undefined),
+                saldoInicial: u.saldoInicial ?? u.SaldoInicial ?? 0
             }));
+            if (!PERFILES_SEMILLA.some(p => p.id === 99 || (p.email || '').toLowerCase() === 'admin@subastaya.com')) {
+                PERFILES_SEMILLA.push({
+                    id: 99,
+                    nombre: 'Administrador del Sistema',
+                    email: 'admin@subastaya.com',
+                    rol: 'ADMIN',
+                    saldoInicial: 0
+                });
+            }
         }
 
         const billeteras = await Promise.all(
@@ -143,7 +185,10 @@ async function cargarPerfilesEnLogin() {
 
             let avatarBg = '#581845';
             let badgeRolClass = 'bg-primary-subtle text-primary border border-primary-subtle';
-            if (rol.includes('Vendedor')) {
+            if (rol.includes('Administrador')) {
+                avatarBg = '#212529';
+                badgeRolClass = 'bg-dark text-white border border-dark';
+            } else if (rol.includes('Vendedor')) {
                 avatarBg = '#c25e00';
                 badgeRolClass = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
             } else if (rol.includes('Líder')) {
@@ -253,7 +298,7 @@ function setBotonCargando(btnId, spinnerId, textId, cargando, textoCarga = 'Proc
 }
 
 /* ==========================================================================
-   CONFIGURACIÓN DE HUSOS HORARIOS (UTC EN BASE DE DATOS / UTC-3 EN FRONTEND)
+   CONFIGURACIÓN DE HUSOS HORARIOS (UTC EN BASE DE DATOS / LOCAL EN FRONTEND)
    ========================================================================== */
 const TIMEZONE_UTC3 = 'America/Argentina/Buenos_Aires';
 
@@ -273,7 +318,7 @@ function parseUtcDate(dateStr) {
 }
 
 /**
- * Formatea una fecha y hora en UTC-3 (Argentina): "DD/MM/AAAA, HH:mm:ss"
+ * Formatea una fecha y hora local (Argentina): "DD/MM/AAAA, HH:mm:ss"
  */
 function formatFechaHoraUTC3(dateInput) {
     const d = parseUtcDate(dateInput);
@@ -291,7 +336,7 @@ function formatFechaHoraUTC3(dateInput) {
 }
 
 /**
- * Formatea una fecha y hora corta en UTC-3 (Argentina): "DD/MM/AAAA HH:mm"
+ * Formatea una fecha y hora corta local (Argentina): "DD/MM/AAAA HH:mm"
  */
 function formatFechaHoraCortaUTC3(dateInput) {
     const d = parseUtcDate(dateInput);
@@ -308,7 +353,7 @@ function formatFechaHoraCortaUTC3(dateInput) {
 }
 
 /**
- * Formatea únicamente la hora en UTC-3: "HH:mm:ss"
+ * Formatea únicamente la hora en horario local: "HH:mm:ss"
  */
 function formatHoraUTC3(dateInput) {
     const d = parseUtcDate(dateInput);
@@ -323,7 +368,7 @@ function formatHoraUTC3(dateInput) {
 }
 
 /**
- * Convierte un timestamp/Date a formato "YYYY-MM-DDTHH:mm" en UTC-3
+ * Convierte un timestamp/Date a formato "YYYY-MM-DDTHH:mm" local
  * para ser consumido por un <input type="datetime-local">.
  */
 function formatDatetimeLocalUTC3(dateInput) {
@@ -349,7 +394,7 @@ function formatDatetimeLocalUTC3(dateInput) {
 }
 
 /**
- * Convierte el valor local en UTC-3 de un <input type="datetime-local">
+ * Convierte el valor local de un <input type="datetime-local">
  * a una cadena ISO UTC terminada en "Z" para almacenar en la Base de Datos.
  */
 function utc3InputToIsoUtc(datetimeLocalVal) {
@@ -437,8 +482,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             id: u.id ?? u.Id,
             nombre: u.nombre ?? u.Nombre,
             email: u.email ?? u.Email,
-            saldoInicial: 0
+            rol: u.rol ?? u.Rol ?? ((u.id === 99 || u.Id === 99 || (u.email || u.Email || '').toLowerCase() === 'admin@subastaya.com') ? 'ADMIN' : undefined),
+            saldoInicial: u.saldoInicial ?? u.SaldoInicial ?? 0
         }));
+        if (!PERFILES_SEMILLA.some(p => p.id === 99 || (p.email || '').toLowerCase() === 'admin@subastaya.com')) {
+            PERFILES_SEMILLA.push({
+                id: 99,
+                nombre: 'Administrador del Sistema',
+                email: 'admin@subastaya.com',
+                rol: 'ADMIN',
+                saldoInicial: 0
+            });
+        }
     }
 
     // 2. Verificar si existe una sesión guardada en localStorage
@@ -446,6 +501,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (sesionGuardada) {
         const usuarioEncontrado = PERFILES_SEMILLA.find(p => p.id === sesionGuardada.id || p.email === sesionGuardada.email);
         usuarioActual = usuarioEncontrado || sesionGuardada;
+        if (usuarioActual.id === 99 || (usuarioActual.email || '').toLowerCase() === 'admin@subastaya.com') {
+            usuarioActual.rol = 'ADMIN';
+        }
         ocultarModalLogin();
     } else {
         // No hay sesión activa: mostrar pantalla de bienvenida / login bloqueante
@@ -453,12 +511,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         mostrarModalLogin();
     }
 
+    actualizarVisibilidadAuditoria();
     await renderizarSelectorPerfilesSemilla();
     await cargarCategorias();
     await aplicarFiltros();
     await actualizarBilleteraUI();
     await cargarMisActividades();
-    await cargarLogsAuditoria();
+    if (usuarioActual && usuarioActual.rol === 'ADMIN') {
+        await cargarLogsAuditoria();
+    }
 
     timerCardsInterval = setInterval(actualizarTemporizadoresCatalogo, 1000);
 });
@@ -470,14 +531,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function renderizarSelectorPerfilesSemilla() {
     const dropdownMenu = document.getElementById('dropdown-perfiles-semilla');
-    if (!dropdownMenu || !usuarioActual) return;
+    if (!dropdownMenu) return;
 
-    // Obtenemos los saldos actuales de todas las billeteras en paralelo
-    const billeteras = await Promise.all(
-        PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
-    );
+    if (!usuarioActual) {
+        dropdownMenu.innerHTML = `
+            <li class="p-3 text-center text-muted small">
+                <i class="fa-solid fa-user-slash d-block fs-4 mb-2 text-secondary"></i>
+                No hay una sesión activa.
+            </li>
+        `;
+        return;
+    }
 
-    const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
+    // Consultamos la billetera del usuario activo en tiempo real
+    let bActual = null;
+    try {
+        bActual = await fetchObtenerBilletera(usuarioActual.id);
+    } catch (err) {
+        console.warn("[SubastaYa] No se pudo obtener la billetera del usuario activo:", err);
+    }
+
     const saldoActualDisp = bActual ? (bActual.saldoDisponible ?? bActual.SaldoDisponible ?? (usuarioActual.saldoInicial || 0)) : (usuarioActual.saldoInicial || 0);
     const saldoActualRet = bActual ? (bActual.saldoRetenido ?? bActual.SaldoRetenido ?? 0) : 0;
     const saldoActualTotal = bActual ? (bActual.saldoTotal ?? bActual.SaldoTotal ?? (saldoActualDisp + saldoActualRet)) : saldoActualDisp;
@@ -506,103 +579,65 @@ async function renderizarSelectorPerfilesSemilla() {
 
     const rol = obtenerRolUsuario(usuarioActual);
 
-    // Contenido del menú desplegable de perfil
+    // Contenido del menú desplegable: Tarjeta de perfil activo con información completa y botón de cerrar sesión
     dropdownMenu.innerHTML = `
-        <li class="px-3 py-2 border-bottom bg-light">
-            <div class="d-flex align-items-center mb-2">
-                <div class="navbar-user-avatar me-2" style="width: 34px; height: 34px; font-size: 0.9rem;">
+        <li class="p-3">
+            <div class="d-flex align-items-center mb-3">
+                <div class="navbar-user-avatar me-3 shadow-sm" style="width: 44px; height: 44px; font-size: 1.05rem;">
                     ${obtenerIniciales(usuarioActual.nombre)}
                 </div>
                 <div class="text-truncate">
-                    <div class="fw-bold text-dark text-truncate">${usuarioActual.nombre}</div>
+                    <div class="fw-bold text-dark text-truncate fs-6">${usuarioActual.nombre}</div>
                     <div class="extra-small text-muted text-truncate">${usuarioActual.email}</div>
                 </div>
             </div>
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle extra-small">${rol}</span>
-                <span class="extra-small text-muted font-monospace">ID: #${usuarioActual.id}</span>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="badge ${usuarioActual.rol === 'ADMIN' ? 'bg-dark text-white' : 'bg-primary-subtle text-primary border border-primary-subtle'} extra-small px-2 py-1">${rol}</span>
+                <span class="extra-small text-muted font-monospace">ID Usuario: #${usuarioActual.id}</span>
             </div>
-            <div class="row g-1 text-center font-monospace extra-small">
-                <div class="col-4 bg-white p-1 rounded border">
-                    <span class="text-muted d-block" style="font-size: 0.65rem;">DISPONIBLE</span>
-                    <span class="fw-bold text-success">$${saldoActualDisp.toLocaleString('es-AR')}</span>
+            <div class="bg-light p-2 rounded-3 border mb-1">
+                <div class="row g-2 text-center font-monospace">
+                    <div class="col-6">
+                        <div class="bg-white p-2 rounded border">
+                            <span class="text-muted d-block" style="font-size: 0.65rem;">DISPONIBLE</span>
+                            <span class="fw-bold text-success small">$${saldoActualDisp.toLocaleString('es-AR')}</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="bg-white p-2 rounded border">
+                            <span class="text-muted d-block" style="font-size: 0.65rem;">RETENIDO</span>
+                            <span class="fw-bold text-warning small">$${saldoActualRet.toLocaleString('es-AR')}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-4 bg-white p-1 rounded border">
-                    <span class="text-muted d-block" style="font-size: 0.65rem;">RETENIDO</span>
-                    <span class="fw-bold text-warning">$${saldoActualRet.toLocaleString('es-AR')}</span>
-                </div>
-                <div class="col-4 bg-white p-1 rounded border">
-                    <span class="text-muted d-block" style="font-size: 0.65rem;">TOTAL</span>
+                <div class="d-flex justify-content-between align-items-center mt-2 px-1 extra-small text-muted font-monospace">
+                    <span>Saldo Total:</span>
                     <span class="fw-bold text-dark">$${saldoActualTotal.toLocaleString('es-AR')}</span>
                 </div>
             </div>
         </li>
-        <li class="px-2 py-2">
-            <button class="btn btn-success btn-sm w-100 fw-bold shadow-sm extra-small" onclick="cargarSaldoLibreRapido(100000)">
-                <i class="fa-solid fa-bolt me-1"></i> Carga Rápida +$100.000 a ${usuarioActual.nombre.split(' ')[0]}
-            </button>
+        <li><hr class="dropdown-divider my-0"></li>
+        <li class="p-2">
+            <a class="dropdown-item text-danger d-flex align-items-center rounded-2 py-2 fw-semibold extra-small" href="#" onclick="cerrarSesion(); return false;">
+                <i class="fa-solid fa-right-from-bracket me-2 text-danger fs-6"></i> Cerrar Sesión
+            </a>
         </li>
-        <li><hr class="dropdown-divider my-1"></li>
-        <li><h6 class="dropdown-header text-uppercase extra-small fw-bold">Cambiar Perfil Activo:</h6></li>
-    `;
-
-    PERFILES_SEMILLA.forEach((p, idx) => {
-        const b = billeteras[idx];
-        const saldoDisp = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? p.saldoInicial) : p.saldoInicial;
-        const esActivo = Boolean(usuarioActual && p.id === usuarioActual.id);
-        const pRol = obtenerRolUsuario(p);
-
-        dropdownMenu.innerHTML += `
-            <li>
-                <a class="dropdown-item d-flex align-items-center justify-content-between py-1 px-3 ${esActivo ? 'active fw-bold' : ''}" 
-                   href="#" onclick="cambiarPerfilSemilla(${p.id}); return false;" data-dropdown-user-id="${p.id}">
-                    <div class="me-2 text-truncate">
-                        <div class="text-truncate">${esActivo ? '<i class="fa-solid fa-check me-1 text-warning"></i>' : ''}${p.nombre}</div>
-                        <div class="extra-small opacity-75">${pRol}</div>
-                    </div>
-                    <span class="badge badge-saldo font-monospace ${saldoDisp > 0 ? (esActivo ? 'bg-light text-dark' : 'bg-success-subtle text-success border border-success-subtle') : 'bg-danger-subtle text-danger border border-danger-subtle'}">
-                        $${saldoDisp.toLocaleString('es-AR')}
-                    </span>
-                </a>
-            </li>
-        `;
-    });
-
-    dropdownMenu.innerHTML += `
-        <li><hr class="dropdown-divider my-1"></li>
-        <li><a class="dropdown-item extra-small" href="#" data-bs-toggle="modal" data-bs-target="#modalCargarSaldo"><i class="fa-solid fa-wallet me-2 text-primary-custom"></i>Consola Carga Libre de Saldo...</a></li>
-        <li><a class="dropdown-item extra-small" href="#" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario"><i class="fa-solid fa-user-plus me-2 text-secondary"></i>Crear Nuevo Usuario</a></li>
-        <li><hr class="dropdown-divider my-1"></li>
-        <li><a class="dropdown-item text-danger extra-small fw-semibold" href="#" onclick="cerrarSesion(); return false;"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i>Cerrar Sesión / Cambiar de Perfil</a></li>
     `;
 }
 
 async function sincronizarSaldosDropdown() {
     try {
-        const billeteras = await Promise.all(
-            PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
-        );
-
-        PERFILES_SEMILLA.forEach((p, idx) => {
-            const b = billeteras[idx];
-            if (!b) return;
-            const saldoDisp = b.saldoDisponible ?? b.SaldoDisponible ?? 0;
-            const saldoRet = b.saldoRetenido ?? b.SaldoRetenido ?? 0;
-            actualizarBadgeUsuarioEnDropdown(p.id, saldoDisp, saldoRet);
-        });
-
-        // Actualizar el saldo del usuario activo en la barra superior
-        if (usuarioActual) {
-            const bActual = billeteras.find(b => b && (b.usuarioId === usuarioActual.id || b.UsuarioId === usuarioActual.id));
-            if (bActual) {
-                const saldoActualDisp = bActual.saldoDisponible ?? bActual.SaldoDisponible ?? 0;
-                const navBadge = document.getElementById('nav-user-saldo');
-                if (navBadge) {
-                    navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
-                    navBadge.className = `badge font-monospace ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
-                }
+        if (!usuarioActual) return;
+        const bActual = await fetchObtenerBilletera(usuarioActual.id).catch(() => null);
+        if (bActual) {
+            const saldoActualDisp = bActual.saldoDisponible ?? bActual.SaldoDisponible ?? 0;
+            const navBadge = document.getElementById('nav-user-saldo');
+            if (navBadge) {
+                navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
+                navBadge.className = `badge font-monospace ms-1 ${saldoActualDisp > 0 ? 'bg-success' : 'bg-danger'}`;
             }
         }
+        await renderizarSelectorPerfilesSemilla();
     } catch (err) {
         console.warn("[SubastaYa] Error al sincronizar saldos en dropdown:", err);
     }
@@ -851,7 +886,7 @@ async function aplicarFiltros() {
                 badgeTimerHtml = `
                     <span class="badge bg-warning-subtle text-dark border border-warning-subtle fw-semibold card-timer" 
                           data-subasta-id="${subId}" data-fecha-inicio="${fechaInicioStr}" data-fecha-fin="${fechaFinStr}"
-                          title="Inicia el ${formatFechaHoraCortaUTC3(fechaInicioStr)} (UTC-3)">
+                          title="Inicia el ${formatFechaHoraCortaUTC3(fechaInicioStr)}">
                         Cargando inicio...
                     </span>
                 `;
@@ -863,12 +898,12 @@ async function aplicarFiltros() {
                 badgeTimerHtml = `
                     <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-semibold card-timer" 
                           data-subasta-id="${subId}" data-fecha-inicio="${fechaInicioStr}" data-fecha-fin="${fechaFinStr}"
-                          title="Cierre estimado: ${formatFechaHoraCortaUTC3(fechaFinStr)} (UTC-3)">
+                          title="Cierre estimado: ${formatFechaHoraCortaUTC3(fechaFinStr)}">
                         Cargando...
                     </span>
                 `;
             } else if (subEstado === 'FINALIZADA') {
-                labelTiempo = 'Cerró (UTC-3):';
+                labelTiempo = 'Cerró:';
                 btnText = 'Ver Subasta';
                 btnIcon = 'fa-solid fa-flag-checkered';
                 btnClass = 'btn-secondary';
@@ -879,7 +914,7 @@ async function aplicarFiltros() {
                     </span>
                 `;
             } else { // DESIERTA
-                labelTiempo = 'Cerró (UTC-3):';
+                labelTiempo = 'Cerró:';
                 btnText = 'Ver Subasta';
                 btnIcon = 'fa-solid fa-ban';
                 btnClass = 'btn-dark';
@@ -1037,7 +1072,7 @@ function actualizarTarjetaCatalogo(subastaId, nuevoMontoAnimar = null) {
         } else if (subEstado === 'ACTIVA') {
             timeLabel.innerHTML = '<i class="fa-regular fa-clock me-1"></i>Cierre:';
         } else {
-            timeLabel.innerHTML = '<i class="fa-solid fa-flag-checkered me-1"></i>Cerró (UTC-3):';
+            timeLabel.innerHTML = '<i class="fa-solid fa-flag-checkered me-1"></i>Cerró:';
         }
     }
     if (timerElem) {
@@ -1209,7 +1244,7 @@ async function guardarSubasta(event) {
         return;
     }
 
-    // Convertir fecha de inicio y fin ingresadas en UTC-3 hacia formato ISO UTC estándar con "Z"
+    // Convertir fecha de inicio y fin ingresadas hacia formato ISO UTC estándar con "Z"
     const fechaInicioIso = utc3InputToIsoUtc(fechaInicioVal);
     const fechaFinIso = utc3InputToIsoUtc(fechaFinVal);
 
@@ -1317,9 +1352,9 @@ async function cargarSalaEnVivo(subastaId) {
         if (estadoBadge) {
             estadoBadge.className = `badge ${getEstadoBadgeClass(estadoReal)}`;
             if (estadoReal === 'PROGRAMADA') {
-                estadoBadge.textContent = `PROGRAMADA (Inicia: ${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaInicio)} UTC-3)`;
+                estadoBadge.textContent = `PROGRAMADA (Inicia: ${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaInicio)})`;
             } else if (estadoReal === 'FINALIZADA') {
-                estadoBadge.textContent = `FINALIZADA (${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaFin)} UTC-3)`;
+                estadoBadge.textContent = `FINALIZADA (${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaFin)})`;
             } else if (estadoReal === 'DESIERTA') {
                 estadoBadge.textContent = 'DESIERTA (Sin ofertas)';
             } else {
@@ -2429,7 +2464,9 @@ function configurarEventosUI() {
             } else if (targetId === '#content-actividades') {
                 await cargarMisActividades();
             } else if (targetId === '#content-auditoria') {
-                await cargarLogsAuditoria();
+                if (usuarioActual && usuarioActual.rol === 'ADMIN') {
+                    await cargarLogsAuditoria();
+                }
             }
         });
     });
@@ -2439,6 +2476,51 @@ function configurarEventosUI() {
         dropdownUserContainer.addEventListener('show.bs.dropdown', async () => {
             await sincronizarSaldosDropdown();
         });
+    }
+}
+
+/**
+ * Control de Acceso y Visibilidad del Módulo de Auditoría de Eventos:
+ * Solo visible y accesible cuando usuarioActual.rol === 'ADMIN'.
+ * Para cualquier usuario regular (comprador/vendedor), esta sección permanece completamente oculta.
+ * Si un usuario regular se encontraba en esta pestaña, es redirigido al Catálogo.
+ */
+function actualizarVisibilidadAuditoria() {
+    const tabAuditoria = document.getElementById('tab-auditoria');
+    const contentAuditoria = document.getElementById('content-auditoria');
+    const esAdmin = Boolean(usuarioActual && usuarioActual.rol === 'ADMIN');
+
+    if (tabAuditoria) {
+        if (esAdmin) {
+            tabAuditoria.classList.remove('d-none');
+            tabAuditoria.style.display = '';
+        } else {
+            tabAuditoria.classList.add('d-none');
+            tabAuditoria.style.display = 'none';
+        }
+    }
+
+    if (contentAuditoria) {
+        if (esAdmin) {
+            contentAuditoria.classList.remove('d-none');
+        } else {
+            contentAuditoria.classList.add('d-none');
+            const tabActivo = tabAuditoria && tabAuditoria.classList.contains('active');
+            const contentActivo = contentAuditoria.classList.contains('active') || contentAuditoria.classList.contains('show');
+            if (tabActivo || contentActivo) {
+                if (tabAuditoria) {
+                    tabAuditoria.classList.remove('active');
+                    tabAuditoria.setAttribute('aria-selected', 'false');
+                }
+                contentAuditoria.classList.remove('active', 'show');
+
+                const tabCatalogo = document.getElementById('tab-catalogo');
+                if (tabCatalogo && typeof bootstrap !== 'undefined') {
+                    const bsTab = bootstrap.Tab.getOrCreateInstance(tabCatalogo);
+                    bsTab.show();
+                }
+            }
+        }
     }
 }
 
@@ -2482,6 +2564,7 @@ function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info') {
 let logsAuditoriaCache = [];
 
 async function cargarLogsAuditoria() {
+    if (!usuarioActual || usuarioActual.rol !== 'ADMIN') return;
     const tabla = document.getElementById('tabla-logs-auditoria');
     if (!tabla) return;
 

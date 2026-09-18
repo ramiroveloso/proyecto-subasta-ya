@@ -145,7 +145,7 @@
                             <i class="fa-solid fa-circle-check me-1"></i> Servidor API Conectado
                         </span>
                     </div>
-                    <div>Hora Oficial UTC-3 (Argentina)</div>
+                    <div>Hora Oficial (Argentina)</div>
                 </div>
             </div>
         </div>
@@ -159,7 +159,7 @@
                     <i class="fa-solid fa-gavel text-warning me-2"></i>SubastaYa
                 </span>
                 <span class="badge bg-white text-dark small font-monospace d-none d-md-inline-block opacity-75">
-                    Panel de Control &bull; Hora Oficial UTC-3 (Argentina)
+                    Panel de Control &bull; Hora Oficial (Argentina)
                 </span>
             </div>
             
@@ -219,7 +219,7 @@
                         <button class="nav-link text-start" id="tab-actividades" data-bs-toggle="pill" data-bs-target="#content-actividades" type="button" role="tab" aria-controls="content-actividades" aria-selected="false">
                             <i class="fa-solid fa-user-clock me-2"></i>Mis Actividades
                         </button>
-                        <button class="nav-link text-start" id="tab-auditoria" data-bs-toggle="pill" data-bs-target="#content-auditoria" type="button" role="tab" aria-controls="content-auditoria" aria-selected="false">
+                        <button class="nav-link text-start d-none" id="tab-auditoria" data-bs-toggle="pill" data-bs-target="#content-auditoria" type="button" role="tab" aria-controls="content-auditoria" aria-selected="false" style="display: none;">
                             <i class="fa-solid fa-clipboard-list me-2"></i>Auditoría de Eventos
                         </button>
                     </div>
@@ -337,14 +337,14 @@
 
                                         <div class="row g-3 mb-4">
                                             <div class="col-md-6">
-                                                <label class="form-label fw-semibold">Fecha y Hora de Inicio (UTC-3) <span class="text-danger">*</span></label>
+                                                <label class="form-label fw-semibold">Fecha y Hora de Inicio <span class="text-danger">*</span></label>
                                                 <input type="datetime-local" id="crear-fechaInicio" class="form-control" required>
-                                                <div class="form-text extra-small text-muted">Huso horario Argentina (UTC-3). Se guardará en UTC.</div>
+                                                <div class="form-text extra-small text-muted">Huso horario local (Argentina). Se guardará en UTC.</div>
                                             </div>
                                             <div class="col-md-6">
-                                                <label class="form-label fw-semibold">Fecha y Hora de Cierre (UTC-3) <span class="text-danger">*</span></label>
+                                                <label class="form-label fw-semibold">Fecha y Hora de Cierre <span class="text-danger">*</span></label>
                                                 <input type="datetime-local" id="crear-fechaFin" class="form-control" required>
-                                                <div class="form-text extra-small text-muted">Huso horario Argentina (UTC-3). Se guardará en UTC.</div>
+                                                <div class="form-text extra-small text-muted">Huso horario local (Argentina). Se guardará en UTC.</div>
                                             </div>
                                         </div>
 
@@ -583,7 +583,7 @@
                                             <tr>
                                                 <th>Tipo Transacción</th>
                                                 <th>Monto ($ ARS)</th>
-                                                <th>Fecha / Hora (UTC-3)</th>
+                                                <th>Fecha / Hora</th>
                                                 <th>Concepto / Subasta</th>
                                                 <th>Estado Contable</th>
                                             </tr>
@@ -646,7 +646,7 @@
                     <!-- =================================================================== -->
                     <!-- MÓDULO 6: AUDITORÍA DE EVENTOS Y TRAZABILIDAD (AUDIT LOG) -->
                     <!-- =================================================================== -->
-                    <div class="tab-pane fade" id="content-auditoria" role="tabpanel" aria-labelledby="tab-auditoria">
+                    <div class="tab-pane fade d-none" id="content-auditoria" role="tabpanel" aria-labelledby="tab-auditoria">
                         <div class="card content-card p-4">
                             <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
                                 <div>
@@ -716,7 +716,7 @@
                                             <th style="width: 210px;">Evento / Acción</th>
                                             <th>Detalle del Evento</th>
                                             <th style="width: 140px;">Usuario Ref.</th>
-                                            <th style="width: 160px;">Fecha / Hora (UTC-3)</th>
+                                            <th style="width: 160px;">Fecha / Hora</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tabla-logs-auditoria">
@@ -1002,8 +1002,8 @@
         </div>
     </div>
 
-    <!-- Contenedor Flotante de Notificaciones Toast Moderno -->
-    <div id="toast-container" class="toast-container-modern"></div>
+    <!-- Contenedor Flotante de Notificaciones Toast -->
+    <div id="toast-container" class="toast-container position-fixed bottom-0 start-0 p-3 m-3 z-3"></div>
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

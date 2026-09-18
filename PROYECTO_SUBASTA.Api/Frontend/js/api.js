@@ -9,7 +9,8 @@ let PERFILES_SEMILLA = [
     { id: 1, nombre: 'Vendedor Test', email: 'vendedor@test.com', saldoInicial: 0 },
     { id: 2, nombre: 'Comprador Líder', email: 'comprador1@test.com', saldoInicial: 150000 },
     { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com', saldoInicial: 200000 },
-    { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 }
+    { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 },
+    { id: 99, nombre: 'Administrador del Sistema', email: 'admin@subastaya.com', rol: 'ADMIN', saldoInicial: 0 }
 ];
 
 async function fetchObtenerUsuarios() {
@@ -21,7 +22,8 @@ async function fetchObtenerUsuarios() {
             { id: 1, nombre: 'Vendedor Test', email: 'vendedor@test.com', saldoInicial: 0 },
             { id: 2, nombre: 'Comprador Líder', email: 'comprador1@test.com', saldoInicial: 150000 },
             { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com', saldoInicial: 200000 },
-            { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 }
+            { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com', saldoInicial: 500 },
+            { id: 99, nombre: 'Administrador del Sistema', email: 'admin@subastaya.com', rol: 'ADMIN', saldoInicial: 0 }
         ];
     }
 }
@@ -43,7 +45,8 @@ async function fetchLogin(usuario, password) {
             { id: 1, nombre: 'Vendedor Test', email: 'vendedor@test.com' },
             { id: 2, nombre: 'Comprador Líder', email: 'comprador1@test.com' },
             { id: 3, nombre: 'Comprador Habilitado', email: 'comprador2@test.com' },
-            { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com' }
+            { id: 4, nombre: 'Usuario Sin Fondos', email: 'sinfondos@test.com' },
+            { id: 99, nombre: 'Administrador del Sistema', email: 'admin@subastaya.com', rol: 'ADMIN', saldoInicial: 0 }
         ];
         const encontrado = perfiles.find(p => 
             p.email.toLowerCase() === userTrim || 
@@ -53,7 +56,9 @@ async function fetchLogin(usuario, password) {
             return {
                 id: encontrado.id,
                 nombre: encontrado.nombre,
-                email: encontrado.email
+                email: encontrado.email,
+                rol: encontrado.rol ?? (encontrado.id === 99 ? 'ADMIN' : undefined),
+                saldoInicial: encontrado.saldoInicial || 0
             };
         }
         throw { status: 401, message: 'Usuario o contraseña no reconocidos.' };
