@@ -1,11 +1,11 @@
-using System;
+锘縰sing System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace PROYECTO_SUBASTA.Application.DTOs
 {
     /// <summary>
-    /// DTO de lectura para la consulta de m閠ricas de billetera (Saldo Total, Retenido y Disponible).
+    /// DTO de lectura para la consulta de m茅tricas de billetera (Saldo Total, Retenido y Disponible).
     /// </summary>
     public class BilleteraResponseDto
     {
@@ -23,7 +23,7 @@ namespace PROYECTO_SUBASTA.Application.DTOs
     /// </summary>
     public class CargarSaldoDto
     {
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un usuario v醠ido.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un usuario v谩lido.")]
         public int UsuarioId { get; set; }
 
         [Range(0.01, double.MaxValue, ErrorMessage = "El monto a cargar debe ser mayor a cero.")]
@@ -31,18 +31,33 @@ namespace PROYECTO_SUBASTA.Application.DTOs
     }
 
     /// <summary>
-    /// DTO de entrada para operaciones de garant韆 en Escrow (Retenci髇 / Liberaci髇).
+    /// DTO de entrada para operaciones de garant铆a en Escrow (Retenci贸n / Liberaci贸n).
     /// </summary>
     public class OperacionFondosDto
     {
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un usuario v醠ido.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un usuario v谩lido.")]
         public int UsuarioId { get; set; }
 
         [Range(0.01, double.MaxValue, ErrorMessage = "El monto debe ser superior a cero.")]
         public decimal Monto { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Debe vincular un ID de subasta v醠ido.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe vincular un ID de subasta v谩lido.")]
         public int SubastaId { get; set; }
+    }
+
+    /// <summary>
+    /// DTO para el registro unificado de movimientos en billeteras (Dep贸sito/Carga, Retenci贸n en Escrow, Liberaci贸n).
+    /// </summary>
+    public class RegistrarMovimientoDto
+    {
+        public int? UsuarioId { get; set; }
+
+        [Range(0.01, double.MaxValue, ErrorMessage = "El monto debe ser superior a cero.")]
+        public decimal Monto { get; set; }
+
+        public string? Tipo { get; set; } // "DEPOSITO" / "CARGA", "RETENCION", "LIBERACION"
+
+        public int? SubastaId { get; set; }
     }
 
     /// <summary>

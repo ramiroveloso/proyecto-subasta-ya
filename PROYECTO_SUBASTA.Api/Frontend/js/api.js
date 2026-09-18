@@ -28,7 +28,7 @@ async function fetchObtenerUsuarios() {
 
 async function fetchLogin(usuario, password) {
     try {
-        const res = await apiFetch('/Usuarios/login', {
+        const res = await apiFetch('/Usuarios/sesiones', {
             method: 'POST',
             body: JSON.stringify({ usuario, password })
         });
@@ -525,7 +525,7 @@ async function fetchCrearUsuario(nombre, email) {
 
 async function fetchObtenerBilletera(usuarioId) {
     try {
-        return await apiFetch(`/Billetera/${usuarioId}`);
+        return await apiFetch(`/Billeteras/${usuarioId}`);
     } catch (e) {
         if (!MOCK_BILLETERAS[usuarioId]) {
             MOCK_BILLETERAS[usuarioId] = {
@@ -544,7 +544,7 @@ async function fetchObtenerBilletera(usuarioId) {
 
 async function fetchObtenerMovimientos(usuarioId) {
     try {
-        return await apiFetch(`/Billetera/${usuarioId}/movimientos`);
+        return await apiFetch(`/Billeteras/${usuarioId}/movimientos`);
     } catch (e) {
         const b = MOCK_BILLETERAS[usuarioId];
         return b ? b.movimientos : [];
@@ -554,9 +554,9 @@ async function fetchObtenerMovimientos(usuarioId) {
 /** Cargar Saldo Libre para Usuarios / Tester */
 async function fetchCargarSaldo(usuarioId, monto) {
     try {
-        return await apiFetch('/Billetera/cargar', {
+        return await apiFetch(`/Billeteras/${usuarioId}/movimientos`, {
             method: 'POST',
-            body: JSON.stringify({ usuarioId, monto })
+            body: JSON.stringify({ usuarioId, monto, tipo: 'DEPOSITO' })
         });
     } catch (e) {
         if (e.status === 400) throw e;
@@ -578,9 +578,9 @@ async function fetchCargarSaldo(usuarioId, monto) {
 
 async function fetchRetenerSaldo(usuarioId, monto, subastaId) {
     try {
-        return await apiFetch('/Billetera/retener', {
+        return await apiFetch(`/Billeteras/${usuarioId}/movimientos`, {
             method: 'POST',
-            body: JSON.stringify({ usuarioId, monto, subastaId })
+            body: JSON.stringify({ usuarioId, monto, subastaId, tipo: 'RETENCION' })
         });
     } catch (e) {
         const b = await fetchObtenerBilletera(usuarioId);
@@ -609,9 +609,9 @@ async function fetchRetenerSaldo(usuarioId, monto, subastaId) {
 
 async function fetchLiberarSaldo(usuarioId, monto, subastaId) {
     try {
-        return await apiFetch('/Billetera/liberar', {
+        return await apiFetch(`/Billeteras/${usuarioId}/movimientos`, {
             method: 'POST',
-            body: JSON.stringify({ usuarioId, monto, subastaId })
+            body: JSON.stringify({ usuarioId, monto, subastaId, tipo: 'LIBERACION' })
         });
     } catch (e) {
         const b = await fetchObtenerBilletera(usuarioId);
@@ -656,7 +656,7 @@ let MOCK_AUDITORIA = [
 
 async function fetchObtenerAuditoria(limite = 100) {
     try {
-        return await apiFetch(`/Auditoria?limite=${limite}`);
+        return await apiFetch(`/Auditorias?limite=${limite}`);
     } catch (e) {
         console.warn("No se pudieron cargar logs de auditoría de la API, usando fallback local.", e);
         return MOCK_AUDITORIA || [];
@@ -665,11 +665,11 @@ async function fetchObtenerAuditoria(limite = 100) {
 
 async function fetchProcesarSubastasVencidas() {
     try {
-        return await apiFetch('/Subastas/procesar-vencidas', {
+        return await apiFetch('/Subastas/cierres', {
             method: 'POST'
         });
     } catch (e) {
-        console.warn("Error al invocar procesar-vencidas.", e);
+        console.warn("Error al invocar cierres de subastas.", e);
         return null;
     }
 }
