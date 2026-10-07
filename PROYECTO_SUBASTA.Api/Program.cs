@@ -1,6 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Api.Middlewares;
 using PROYECTO_SUBASTA.Api.Workers;
+using PROYECTO_SUBASTA.Application.Commands.Billeteras;
+using PROYECTO_SUBASTA.Application.Commands.Subastas;
+using PROYECTO_SUBASTA.Application.Commands.Usuarios;
+using PROYECTO_SUBASTA.Application.Queries.Billeteras;
+using PROYECTO_SUBASTA.Application.Queries.Subastas;
+using PROYECTO_SUBASTA.Application.Queries.Usuarios;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Domain.Entities;
@@ -54,6 +60,7 @@ builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<ICategoriaRepository, CategoriaRepository>();
 builder.Services.AddScoped<ISubastaRepository, SubastaRepository>();
 builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
 builder.Services.AddScoped<IAdjudicacionService, AdjudicacionService>();
@@ -62,6 +69,20 @@ builder.Services.AddScoped<CategoriaUseCases>();
 builder.Services.AddScoped<SubastaUseCases>();
 builder.Services.AddScoped<UsuarioUseCases>();
 builder.Services.AddScoped<IBilleteraService, BilleteraService>();
+
+// Handlers CQRS (Commands)
+builder.Services.AddScoped<RegistrarPujaCommandHandler>();
+builder.Services.AddScoped<CrearSubastaCommandHandler>();
+builder.Services.AddScoped<CargarSaldoCommandHandler>();
+builder.Services.AddScoped<IniciarSesionCommandHandler>();
+
+// Handlers CQRS (Queries)
+builder.Services.AddScoped<ObtenerSubastasActivasQueryHandler>();
+builder.Services.AddScoped<ObtenerSubastaPorIdQueryHandler>();
+builder.Services.AddScoped<ObtenerBilleteraPorUsuarioQueryHandler>();
+builder.Services.AddScoped<ObtenerMovimientosQueryHandler>();
+builder.Services.AddScoped<ObtenerUsuariosQueryHandler>();
+builder.Services.AddScoped<ObtenerUsuarioPorIdQueryHandler>();
 
 // ========================================================================
 // 2.3 PROCESO EN SEGUNDO PLANO (BACKGROUND WORKER)
@@ -251,29 +272,32 @@ using (var scope = app.Services.CreateScope())
             });
         }
 
-        // Garantizar asientos contables de liquidación (PAGO / COBRO) para Subasta 4
-        if (!context.TransactionLedgers.Any(t => t.SubastaId == 4 && t.Tipo == TipoTransaccion.PAGO))
+        // Limpieza de asientos falsos de liquidación (PAGO / COBRO) de 25000 no respaldados en las billeteras
+        var falsosAsientosSubasta4 = context.TransactionLedgers
+            .Where(t => t.SubastaId == 4 && (t.Tipo == TipoTransaccion.PAGO || t.Tipo == TipoTransaccion.COBRO))
+            .ToList();
+        if (falsosAsientosSubasta4.Any())
         {
-            context.TransactionLedgers.Add(new TransactionLedger
-            {
-                BilleteraId = 2, // Billetera Comprador Líder
-                Tipo = TipoTransaccion.PAGO,
-                Monto = 25000.00m,
-                Fecha = ahoraUtc.AddHours(-2),
-                SubastaId = 4
-            });
+            context.TransactionLedgers.RemoveRange(falsosAsientosSubasta4);
         }
 
-        if (!context.TransactionLedgers.Any(t => t.SubastaId == 4 && t.Tipo == TipoTransaccion.COBRO))
+        // Sincronización y consistencia contable de billeteras para usuarios de prueba (3 y 4)
+        var billetera3 = context.Billeteras.FirstOrDefault(b => b.UsuarioId == 3);
+        if (billetera3 != null)
         {
-            context.TransactionLedgers.Add(new TransactionLedger
-            {
-                BilleteraId = 1, // Billetera Vendedor Test
-                Tipo = TipoTransaccion.COBRO,
-                Monto = 25000.00m,
-                Fecha = ahoraUtc.AddHours(-2),
-                SubastaId = 4
-            });
+            billetera3.SaldoTotal = 200000.00m;
+            billetera3.SaldoRetenido = 0.00m;
+            billetera3.SaldoDisponible = 200000.00m;
+            if (billetera3.Version == 0) billetera3.Version = 1;
+        }
+
+        var billetera4 = context.Billeteras.FirstOrDefault(b => b.UsuarioId == 4);
+        if (billetera4 != null)
+        {
+            billetera4.SaldoTotal = 0.00m;
+            billetera4.SaldoRetenido = 0.00m;
+            billetera4.SaldoDisponible = 0.00m;
+            if (billetera4.Version == 0) billetera4.Version = 1;
         }
 
         // Logs de auditoría semilla si la tabla está vacía

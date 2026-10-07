@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using PROYECTO_SUBASTA.Domain.Entities;
@@ -21,6 +21,11 @@ namespace PROYECTO_SUBASTA.Application.UseCases
         public async Task<IEnumerable<Categoria>> ObtenerTodasAsync()
         {
             return await _categoriaRepository.ObtenerTodasAsync();
+        }
+
+        public async Task<Categoria?> ObtenerPorIdAsync(int id)
+        {
+            return await _categoriaRepository.ObtenerPorIdAsync(id);
         }
 
         // Ejecuta la lógica para registrar una nueva categoría validando reglas previas si fuera necesario.

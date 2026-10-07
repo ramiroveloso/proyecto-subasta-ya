@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PROYECTO_SUBASTA.Application.Exceptions;
+using PROYECTO_SUBASTA.Domain.Exceptions;
 
 namespace PROYECTO_SUBASTA.Api.Middlewares
 {
@@ -50,7 +51,7 @@ namespace PROYECTO_SUBASTA.Api.Middlewares
                         var auditoria = context.RequestServices.GetService<PROYECTO_SUBASTA.Application.UseCases.IAuditoriaService>();
                         if (auditoria != null)
                         {
-                            _ = auditoria.RegistrarAsync(
+                            _ = auditoria.RegistrarFalloAsync(
                                 "PUJA_RECHAZADA_CONCURRENCIA",
                                 $"Conflicto de concurrencia optimista detectado en ruta {context.Request.Path}: {mensaje}",
                                 null
@@ -69,7 +70,7 @@ namespace PROYECTO_SUBASTA.Api.Middlewares
                         var auditoria = context.RequestServices.GetService<PROYECTO_SUBASTA.Application.UseCases.IAuditoriaService>();
                         if (auditoria != null)
                         {
-                            _ = auditoria.RegistrarAsync(
+                            _ = auditoria.RegistrarFalloAsync(
                                 "PUJA_RECHAZADA_CONCURRENCIA",
                                 $"Conflicto de concurrencia detectado en ruta {context.Request.Path}: {mensaje}",
                                 null
@@ -89,6 +90,18 @@ namespace PROYECTO_SUBASTA.Api.Middlewares
                     statusCode = HttpStatusCode.NotFound;
                     mensaje = ex.Message;
                     _logger.LogInformation("Clave no encontrada: {Mensaje}", ex.Message);
+                    break;
+
+                case DominioException ex:
+                    statusCode = HttpStatusCode.BadRequest;
+                    mensaje = ex.Message;
+                    _logger.LogWarning("Violación de regla de dominio: {Mensaje}", ex.Message);
+                    break;
+
+                case UnauthorizedAccessException ex:
+                    statusCode = HttpStatusCode.Unauthorized;
+                    mensaje = ex.Message;
+                    _logger.LogWarning("Acceso no autorizado: {Mensaje}", ex.Message);
                     break;
 
                 case ReglaNegocioException ex:

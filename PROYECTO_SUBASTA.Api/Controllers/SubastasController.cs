@@ -1,114 +1,100 @@
-using Microsoft.AspNetCore.Mvc;
-using PROYECTO_SUBASTA.Domain.Entities;
-using PROYECTO_SUBASTA.Application.UseCases;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Linq;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using PROYECTO_SUBASTA.Application.Commands.Subastas;
 using PROYECTO_SUBASTA.Application.DTOs;
+using PROYECTO_SUBASTA.Application.Queries.Subastas;
+using PROYECTO_SUBASTA.Application.UseCases;
 
 namespace PROYECTO_SUBASTA.Api.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("api/[controller]")]
+    [Produces("application/json")]
     public class SubastasController : ControllerBase
     {
-        private readonly SubastaUseCases _subastaUseCases;
+        private readonly ObtenerSubastasActivasQueryHandler _obtenerSubastasActivasHandler;
+        private readonly ObtenerSubastaPorIdQueryHandler _obtenerSubastaPorIdHandler;
+        private readonly CrearSubastaCommandHandler _crearSubastaHandler;
+        private readonly RegistrarPujaCommandHandler _registrarPujaHandler;
+        private readonly IAdjudicacionService _adjudicacionService;
 
-        public SubastasController(SubastaUseCases subastaUseCases)
+        public SubastasController(
+            ObtenerSubastasActivasQueryHandler obtenerSubastasActivasHandler,
+            ObtenerSubastaPorIdQueryHandler obtenerSubastaPorIdHandler,
+            CrearSubastaCommandHandler crearSubastaHandler,
+            RegistrarPujaCommandHandler registrarPujaHandler,
+            IAdjudicacionService adjudicacionService)
         {
-            _subastaUseCases = subastaUseCases;
+            _obtenerSubastasActivasHandler = obtenerSubastasActivasHandler;
+            _obtenerSubastaPorIdHandler = obtenerSubastaPorIdHandler;
+            _crearSubastaHandler = crearSubastaHandler;
+            _registrarPujaHandler = registrarPujaHandler;
+            _adjudicacionService = adjudicacionService;
         }
 
+        /// <summary>
+        /// Recupera el catálogo de subastas activas de forma paginada para optimizar recursos.
+        /// </summary>
         [HttpGet]
+        [ProducesResponseType(typeof(IEnumerable<SubastaResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> ObtenerActivas([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50)
         {
-            // Paginación aplicada para evitar sobrecargar la base de datos y mapeo a DTO para evitar ciclos de serialización
-            var subastas = await _subastaUseCases.ObtenerActivasPaginadasAsync(pageNumber, pageSize);
-            var dtos = subastas.Select(subasta => new SubastaResponseDto
+            var dtos = await _obtenerSubastasActivasHandler.HandleAsync(new ObtenerSubastasActivasQuery
             {
-                Id = subasta.Id,
-                Titulo = subasta.Titulo,
-                Descripcion = subasta.Descripcion,
-                UrlImagen = subasta.UrlImagen,
-                PrecioBase = subasta.PrecioBase,
-                IncrementoMinimo = subasta.IncrementoMinimo,
-                FechaInicio = subasta.FechaInicio,
-                FechaFin = subasta.FechaFin,
-                Estado = subasta.Estado,
-                CategoriaId = subasta.CategoriaId,
-                CategoriaNombre = subasta.Categoria?.Nombre ?? string.Empty,
-                VendedorId = subasta.VendedorId,
-                GanadorId = subasta.GanadorId,
-                PrecioFinal = subasta.PrecioFinal,
-                Version = subasta.Version,
-                Pujas = subasta.Pujas?.Select(p => new PujaItemDto
-                {
-                    Id = p.Id,
-                    SubastaId = p.SubastaId,
-                    UsuarioId = p.UsuarioId,
-                    Monto = p.Monto,
-                    FechaCreacion = p.FechaCreacion,
-                    PostorAnonimo = $"Postor #{(p.UsuarioId * 33 + 100):X}"
-                }).ToList() ?? new()
-            }).ToList();
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            });
 
             return Ok(dtos);
         }
 
+        /// <summary>
+        /// Consulta la información detallada de una subasta específica y su historial de ofertas.
+        /// </summary>
         [HttpGet("{id}")]
+        [ProducesResponseType(typeof(SubastaResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ObtenerPorId(int id)
         {
-            var subasta = await _subastaUseCases.ObtenerPorIdAsync(id);
-
-            if (subasta == null)
+            var subastaDto = await _obtenerSubastaPorIdHandler.HandleAsync(new ObtenerSubastaPorIdQuery { Id = id });
+            if (subastaDto == null)
             {
                 return NotFound(new { mensaje = $"No se encontró la subasta con el ID {id}." });
             }
 
-            var responseDto = new SubastaResponseDto
-            {
-                Id = subasta.Id,
-                Titulo = subasta.Titulo,
-                Descripcion = subasta.Descripcion,
-                UrlImagen = subasta.UrlImagen,
-                PrecioBase = subasta.PrecioBase,
-                IncrementoMinimo = subasta.IncrementoMinimo,
-                FechaInicio = subasta.FechaInicio,
-                FechaFin = subasta.FechaFin,
-                Estado = subasta.Estado,
-                CategoriaId = subasta.CategoriaId,
-                CategoriaNombre = subasta.Categoria?.Nombre ?? string.Empty,
-                VendedorId = subasta.VendedorId,
-                GanadorId = subasta.GanadorId,
-                PrecioFinal = subasta.PrecioFinal,
-                Version = subasta.Version,
-                Pujas = subasta.Pujas?.Select(p => new PujaItemDto
-                {
-                    Id = p.Id,
-                    SubastaId = p.SubastaId,
-                    UsuarioId = p.UsuarioId,
-                    Monto = p.Monto,
-                    FechaCreacion = p.FechaCreacion,
-                    PostorAnonimo = $"Postor #{(p.UsuarioId * 33 + 100):X}"
-                }).ToList() ?? new()
-            };
-
-            return Ok(responseDto);
+            return Ok(subastaDto);
         }
 
+        /// <summary>
+        /// Registra una nueva subasta en el sistema validando sus fechas, precio base e incrementos.
+        /// </summary>
         [HttpPost]
-        public async Task<IActionResult> Crear([FromBody] Subasta subasta)
+        [ProducesResponseType(typeof(SubastaResponseDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Crear([FromBody] CrearSubastaDto dto)
         {
-            if (subasta == null)
+            if (dto == null)
             {
                 return BadRequest("Los datos de la subasta son inválidos.");
             }
 
-            await _subastaUseCases.CrearAsync(subasta);
+            var subasta = await _crearSubastaHandler.HandleAsync(dto);
+            var responseDto = ObtenerSubastasActivasQueryHandler.MapearADto(subasta);
 
-            return CreatedAtAction(nameof(ObtenerPorId), new { id = subasta.Id }, subasta);
+            return CreatedAtAction(nameof(ObtenerPorId), new { id = subasta.Id }, responseDto);
         }
 
+        /// <summary>
+        /// Registra una oferta de forma atómica en el motor de subastas con control de concurrencia optimista (OCC),
+        /// retención en Escrow y aplicación automática de la regla Anti-Sniping.
+        /// </summary>
         [HttpPost("{id}/pujas")]
+        [ProducesResponseType(typeof(RegistrarPujaResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> RegistrarPuja(int id, [FromBody] RegistrarPujaDto dto)
         {
             if (dto == null)
@@ -116,33 +102,25 @@ namespace PROYECTO_SUBASTA.Api.Controllers
                 return BadRequest("Los datos de la puja son inválidos.");
             }
 
-            var resultado = await _subastaUseCases.RegistrarPujaAsync(id, dto.UsuarioId, dto.Monto, dto.Version);
-
-            return Ok(new
+            var respuesta = await _registrarPujaHandler.HandleAsync(new RegistrarPujaCommand
             {
-                mensaje = resultado.AntiSnipingActivado
-                    ? "Puja registrada con éxito. ¡Regla Anti-Sniping activada (+60s)!"
-                    : "Puja registrada con éxito y saldo retenido en Escrow.",
-                version = resultado.SubastaVersion,
-                fechaFin = resultado.Subasta.FechaFin,
-                antiSnipingActivado = resultado.AntiSnipingActivado,
-                puja = new PujaItemDto
-                {
-                    Id = resultado.Puja.Id,
-                    SubastaId = resultado.Puja.SubastaId,
-                    UsuarioId = resultado.Puja.UsuarioId,
-                    Monto = resultado.Puja.Monto,
-                    FechaCreacion = resultado.Puja.FechaCreacion,
-                    PostorAnonimo = $"Postor #{(resultado.Puja.UsuarioId * 33 + 100):X}"
-                }
+                SubastaId = id,
+                UsuarioId = dto.UsuarioId,
+                Monto = dto.Monto,
+                VersionCliente = dto.Version
             });
+
+            return Ok(respuesta);
         }
 
-        // POST: api/Subastas/cierres
+        /// <summary>
+        /// Ejecuta el proceso de sincronización, adjudicación y cierre para subastas vencidas.
+        /// </summary>
         [HttpPost("cierres")]
-        public async Task<IActionResult> ProcesarCierres([FromServices] IAdjudicacionService adjudicacionService)
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> ProcesarCierres()
         {
-            var res = await adjudicacionService.ProcesarSubastasVencidasAsync();
+            var res = await _adjudicacionService.ProcesarSubastasVencidasAsync();
             return Ok(new
             {
                 mensaje = "Proceso de verificación y adjudicación ejecutado exitosamente.",
