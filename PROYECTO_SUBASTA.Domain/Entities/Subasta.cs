@@ -97,9 +97,9 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         /// <summary>
         /// Evalúa la regla Anti-Sniping paramétrica.
-        /// Si la puja entra en el umbral previo al cierre (por defecto 60s), extiende la FechaFin.
+        /// Si la puja entra en el umbral previo al cierre (por defecto 60s), extiende la FechaFin por la cantidad de segundos configurada (por defecto 120s).
         /// </summary>
-        public bool EvaluarAntiSniping(DateTime ahoraUtc, int umbralSegundos = 60, int extensionSegundos = 60)
+        public bool EvaluarAntiSniping(DateTime ahoraUtc, int umbralSegundos = 60, int extensionSegundos = 120)
         {
             var tiempoRestante = FechaFin - ahoraUtc;
             if (tiempoRestante > TimeSpan.Zero && tiempoRestante.TotalSeconds <= umbralSegundos)
@@ -120,7 +120,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
             DateTime ahoraUtc,
             decimal? saldoDisponiblePostor = null,
             int antiSnipingUmbralSegundos = 60,
-            int antiSnipingExtensionSegundos = 60)
+            int antiSnipingExtensionSegundos = 120)
         {
             ValidarPuedePujar(usuarioId, monto, ahoraUtc, saldoDisponiblePostor);
 

@@ -76,7 +76,9 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
                     command.UsuarioId,
                     command.Monto,
                     ahoraUtc,
-                    billeteraNuevoPostor.SaldoDisponible
+                    billeteraNuevoPostor.SaldoDisponible,
+                    antiSnipingUmbralSegundos: 60,
+                    antiSnipingExtensionSegundos: 120
                 );
 
                 // 6. Retener garantía en la billetera del postor y asentar en el libro mayor
@@ -122,7 +124,7 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
                 // 9. Registrar evento de auditoría dentro de la misma transacción
                 await _auditoriaService.RegistrarAsync(
                     "PUJA_REGISTRADA",
-                    $"Puja de ${command.Monto:N2} registrada con éxito por Usuario #{command.UsuarioId} en Subasta #{subasta.Id}. Garantía Escrow retenida: ${montoARetener:N2}. Anti-Sniping: {(antiSnipingActivado ? "ACTIVADO (+60s)" : "NO")}.",
+                    $"Puja de ${command.Monto:N2} registrada con éxito por Usuario #{command.UsuarioId} en Subasta #{subasta.Id}. Garantía Escrow retenida: ${montoARetener:N2}. Anti-Sniping: {(antiSnipingActivado ? "ACTIVADO (+120s)" : "NO")}.",
                     command.UsuarioId
                 );
 
@@ -132,7 +134,7 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
                 return new RegistrarPujaResponseDto
                 {
                     Mensaje = antiSnipingActivado
-                        ? "Puja registrada con éxito. ¡Regla Anti-Sniping activada (+60s)!"
+                        ? "Puja registrada con éxito. ¡Regla Anti-Sniping activada (+120s)!"
                         : "Puja registrada con éxito y saldo retenido en Escrow.",
                     Version = subasta.Version,
                     FechaFin = subasta.FechaFin,

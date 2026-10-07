@@ -292,7 +292,8 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             // Assert
             Assert.True(res.AntiSnipingActivado);
             Assert.True(res.FechaFin > fechaFinOriginal);
-            Assert.True((res.FechaFin - fechaFinOriginal).TotalSeconds >= 59);
+            Assert.True((res.FechaFin - fechaFinOriginal).TotalSeconds >= 119);
+            Assert.Equal(fechaFinOriginal.AddSeconds(120), res.FechaFin);
         }
 
         [Fact]

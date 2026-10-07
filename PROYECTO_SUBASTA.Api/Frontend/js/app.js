@@ -1448,7 +1448,7 @@ function actualizarRelojSala() {
             if (timerBox) timerBox.className = 'timer-box timer-critical-alert';
             if (antiSnipingBadge) {
                 antiSnipingBadge.className = 'anti-sniping-badge bg-danger text-white mt-2';
-                antiSnipingBadge.innerHTML = '<i class="fa-solid fa-shield-cat me-1"></i> ¡ZONA CRÍTICA ANTI-SNIPING! Nueva puja extenderá +60s';
+                antiSnipingBadge.innerHTML = '<i class="fa-solid fa-shield-cat me-1"></i> ¡ZONA CRÍTICA ANTI-SNIPING! Nueva puja extenderá +120s';
             }
         } else if (diff <= 300000) {
             if (timerBox) timerBox.className = 'timer-box timer-warning-alert';
@@ -1759,7 +1759,7 @@ async function enviarPuja(event) {
             const ahora = Date.now();
             const fechaFinMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
             if ((fechaFinMs - ahora) <= 60000 && (fechaFinMs - ahora) > 0) {
-                subastaSeleccionadaSala.fechaFin = new Date(fechaFinMs + 60000).toISOString();
+                subastaSeleccionadaSala.fechaFin = new Date(fechaFinMs + 120000).toISOString();
                 antiSnipingActivado = true;
             }
         }
@@ -1801,7 +1801,7 @@ async function enviarPuja(event) {
         }
 
         if (antiSnipingActivado) {
-            mostrarToast(`⚡ <strong>¡REGLA ANTI-SNIPING ACTIVADA!</strong> Se han añadido +60 segundos al temporizador por oferta de último minuto.`, 'Anti-Sniping Activado', 'warning');
+            mostrarToast(`⚡ <strong>¡REGLA ANTI-SNIPING ACTIVADA!</strong> Se han añadido +120 segundos al temporizador por oferta de último minuto.`, 'Anti-Sniping Activado', 'warning');
         } else {
             mostrarToast(`¡Oferta enviada por $${montoInput.toLocaleString('es-AR')}! Retenido en Escrow.`, 'Oferta Exitosa', 'success');
         }
@@ -2613,7 +2613,7 @@ function getBadgeAuditoria(accion) {
         case 'VENTA_REGISTRADA':
             return { badge: 'bg-success text-white', label: '<i class="fa-solid fa-handshake me-1"></i> Venta / Liquidación' };
         case 'EXTENSION_ANTI_SNIPING':
-            return { badge: 'bg-warning text-dark', label: '<i class="fa-solid fa-shield-cat me-1"></i> Anti-Sniping (+60s)' };
+            return { badge: 'bg-warning text-dark', label: '<i class="fa-solid fa-shield-cat me-1"></i> Anti-Sniping (+120s)' };
         case 'PUJA_RECHAZADA':
             return { badge: 'bg-danger text-white', label: '<i class="fa-solid fa-ban me-1"></i> Puja Rechazada (Negocio)' };
         case 'PUJA_RECHAZADA_CONCURRENCIA':

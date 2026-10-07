@@ -194,22 +194,53 @@ namespace PROYECTO_SUBASTA.Domain.Tests
                 Version = 3
             };
 
-            // Act: Registrar puja de $12.000 con umbral de 60s y extensión de 60s
+            // Act: Registrar puja de $12.000 con umbral de 60s y extensión de 120s
             var resultado = subasta.RegistrarPuja(
                 usuarioId: 2,
                 monto: 12000m,
                 ahoraUtc: ahora,
                 saldoDisponiblePostor: 50000m,
                 antiSnipingUmbralSegundos: 60,
-                antiSnipingExtensionSegundos: 60
+                antiSnipingExtensionSegundos: 120
             );
 
             // Assert
             Assert.True(resultado.AntiSnipingActivado);
-            Assert.Equal(fechaFinOriginal.AddSeconds(60), subasta.FechaFin);
+            Assert.Equal(fechaFinOriginal.AddSeconds(120), subasta.FechaFin);
             Assert.Equal((uint)4, subasta.Version);
             Assert.Single(subasta.Pujas);
             Assert.Equal(12000m, resultado.NuevaPuja.Monto);
+        }
+
+        [Fact]
+        public void RegistrarPuja_UsaExtensionPorDefectoDe120Segundos()
+        {
+            // Arrange: Cierra en 30 segundos (< 60s umbral)
+            var ahora = DateTime.UtcNow;
+            var fechaFinOriginal = ahora.AddSeconds(30);
+            var subasta = new Subasta
+            {
+                Id = 1,
+                VendedorId = 1,
+                Estado = "ACTIVA",
+                PrecioBase = 10000m,
+                IncrementoMinimo = 1000m,
+                FechaInicio = ahora.AddMinutes(-30),
+                FechaFin = fechaFinOriginal,
+                Version = 1
+            };
+
+            // Act: Invocación con parámetros por defecto
+            var resultado = subasta.RegistrarPuja(
+                usuarioId: 2,
+                monto: 12000m,
+                ahoraUtc: ahora,
+                saldoDisponiblePostor: 50000m
+            );
+
+            // Assert: Debe haber extendido 120 segundos por defecto
+            Assert.True(resultado.AntiSnipingActivado);
+            Assert.Equal(fechaFinOriginal.AddSeconds(120), subasta.FechaFin);
         }
 
         [Fact]
@@ -237,7 +268,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
                 ahoraUtc: ahora,
                 saldoDisponiblePostor: 50000m,
                 antiSnipingUmbralSegundos: 60,
-                antiSnipingExtensionSegundos: 60
+                antiSnipingExtensionSegundos: 120
             );
 
             // Assert
