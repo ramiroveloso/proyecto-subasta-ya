@@ -95,6 +95,10 @@ namespace PROYECTO_SUBASTA.Infrastructure.Data
                 .Property(s => s.Version)
                 .IsConcurrencyToken();
 
+            modelBuilder.Entity<Billetera>()
+                .Property(b => b.Version)
+                .IsConcurrencyToken();
+
             // ==========================================
             // DATOS SEMILLA (SEED DATA OBLIGATORIOS)
             // ==========================================
@@ -120,7 +124,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Data
                 new Billetera { Id = 1, UsuarioId = 1, SaldoTotal = 0.00m, SaldoRetenido = 0.00m, SaldoDisponible = 0.00m, Version = 1 },
                 new Billetera { Id = 2, UsuarioId = 2, SaldoTotal = 150000.00m, SaldoRetenido = 45000.00m, SaldoDisponible = 105000.00m, Version = 1 },
                 new Billetera { Id = 3, UsuarioId = 3, SaldoTotal = 200000.00m, SaldoRetenido = 0.00m, SaldoDisponible = 200000.00m, Version = 1 },
-                new Billetera { Id = 4, UsuarioId = 4, SaldoTotal = 500.00m, SaldoRetenido = 0.00m, SaldoDisponible = 500.00m, Version = 1 }
+                new Billetera { Id = 4, UsuarioId = 4, SaldoTotal = 0.00m, SaldoRetenido = 0.00m, SaldoDisponible = 0.00m, Version = 1 }
             );
 
             // 4. Subastas (Casos de Prueba obligatorios con VendedorId = 1)
@@ -152,9 +156,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Data
                 // Depósito inicial de $200.000, retención y posterior liberación para Usuario 3 (Comprador Habilitado)
                 new TransactionLedger { Id = 3, BilleteraId = 3, Tipo = TipoTransaccion.DEPOSITO, Monto = 200000.00m, Fecha = DateTime.UtcNow.AddDays(-1), SubastaId = null },
                 new TransactionLedger { Id = 4, BilleteraId = 3, Tipo = TipoTransaccion.RETENCION, Monto = 35000.00m, Fecha = DateTime.UtcNow.AddMinutes(-15), SubastaId = 1 },
-                new TransactionLedger { Id = 5, BilleteraId = 3, Tipo = TipoTransaccion.LIBERACION, Monto = 35000.00m, Fecha = DateTime.UtcNow.AddMinutes(-5), SubastaId = 1 },
-                // Depósito inicial de $500 para Usuario 4 (Usuario Sin Fondos)
-                new TransactionLedger { Id = 6, BilleteraId = 4, Tipo = TipoTransaccion.DEPOSITO, Monto = 500.00m, Fecha = DateTime.UtcNow.AddDays(-1), SubastaId = null }
+                new TransactionLedger { Id = 5, BilleteraId = 3, Tipo = TipoTransaccion.LIBERACION, Monto = 35000.00m, Fecha = DateTime.UtcNow.AddMinutes(-5), SubastaId = 1 }
             );
         }
     }

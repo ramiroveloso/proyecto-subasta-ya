@@ -35,9 +35,8 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             var billetera = await _billeteraRepository.ObtenerPorUsuarioIdAsync(usuarioId);
             if (billetera == null) return false;
 
-            // Transición de estado: se incrementa la liquidez total y disponible
-            billetera.SaldoTotal += monto;
-            billetera.SaldoDisponible += monto;
+            // Transición de estado delegada al dominio rico
+            billetera.CargarSaldo(monto);
             _billeteraRepository.Update(billetera);
 
             // Registro en el libro diario para trazabilidad e intangibilidad financiera

@@ -1644,10 +1644,14 @@ async function validarPujaEnVivo() {
 
     // 3. Validar si ya es el postor líder
     let esMiPujaLider = false;
+    let montoLiderPrevio = 0;
     if (pujas.length > 0) {
         const pujasSorted = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
         const mayorPuja = pujasSorted[0];
         esMiPujaLider = (mayorPuja.usuarioId ?? mayorPuja.UsuarioId) === (usuarioActual ? usuarioActual.id : null);
+        if (esMiPujaLider) {
+            montoLiderPrevio = mayorPuja.monto ?? mayorPuja.Monto ?? 0;
+        }
     }
 
     // 4. Validar monto ingresado
@@ -1670,7 +1674,7 @@ async function validarPujaEnVivo() {
         return false;
     }
 
-    // 5. Validar saldo disponible en billetera
+    // 5. Validar saldo disponible en billetera (si ya es líder, solo requiere cubrir el incremento)
     let saldoDisponible = 0;
     try {
         const b = await fetchObtenerBilletera(usuarioActual.id);
@@ -1679,14 +1683,16 @@ async function validarPujaEnVivo() {
         saldoDisponible = usuarioActual.saldoInicial || 0;
     }
 
-    if (saldoDisponible < montoIngresado) {
+    const garantiaRequerida = esMiPujaLider ? Math.max(0, montoIngresado - montoLiderPrevio) : montoIngresado;
+
+    if (saldoDisponible < garantiaRequerida) {
         btnPuja.disabled = true;
         if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-wallet me-2"></i> Saldo Insuficiente';
-        const faltante = montoIngresado - saldoDisponible;
+        const faltante = garantiaRequerida - saldoDisponible;
         feedbackBox.className = 'validation-feedback-box alert alert-danger py-2 small mb-0 d-flex justify-content-between align-items-center';
         feedbackBox.innerHTML = `
             <div>
-                <i class="fa-solid fa-wallet me-1"></i> Saldo disponible: <strong>$${saldoDisponible.toLocaleString('es-AR')}</strong>. Te faltan <strong>$${faltante.toLocaleString('es-AR')}</strong>.
+                <i class="fa-solid fa-wallet me-1"></i> Saldo disponible: <strong>$${saldoDisponible.toLocaleString('es-AR')}</strong>. Te faltan <strong>$${faltante.toLocaleString('es-AR')}</strong> para respaldar la garantía.
             </div>
             <button type="button" class="btn btn-sm btn-success py-0 px-2 fw-bold extra-small" onclick="cargarSaldoLibreRapido(${Math.max(100000, Math.ceil(faltante))})">
                 <i class="fa-solid fa-plus me-1"></i>Cargar
@@ -1702,7 +1708,7 @@ async function validarPujaEnVivo() {
     
     if (esMiPujaLider) {
         feedbackBox.className = 'validation-feedback-box alert alert-info py-1 px-2 extra-small mb-0';
-        feedbackBox.innerHTML = `<i class="fa-solid fa-crown text-warning me-1"></i> Ya eres el postor líder. Al confirmar, tu nueva oferta de <strong>$${montoIngresado.toLocaleString('es-AR')}</strong> reemplazará la anterior en Escrow.`;
+        feedbackBox.innerHTML = `<i class="fa-solid fa-crown text-warning me-1"></i> Ya eres el postor líder. Al confirmar, tu nueva oferta de <strong>$${montoIngresado.toLocaleString('es-AR')}</strong> retendrá únicamente el incremento ($${(garantiaRequerida).toLocaleString('es-AR')}) en Escrow.`;
     } else {
         feedbackBox.className = 'validation-feedback-box alert alert-success-subtle border border-success-subtle text-success py-1 px-2 extra-small mb-0';
         feedbackBox.innerHTML = `<i class="fa-solid fa-shield-check me-1"></i> Oferta válida por <strong>$${montoIngresado.toLocaleString('es-AR')}</strong>. Se retendrá en garantía Escrow preventiva.`;
@@ -1736,39 +1742,8 @@ async function enviarPuja(event) {
         console.warn("No se pudo refrescar la subasta antes de pujar, usando versión local.", e);
     }
 
-    const pujasPrevias = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
-    let retencionRealizada = false;
-    let liberacionMismoUsuarioRealizada = false;
-    let liberacionOtroUsuarioRealizada = false;
-    let prevUsuarioId = null;
-    let prevMonto = 0;
-
     try {
-        let pujaPreviaLiberar = null;
-        if (pujasPrevias.length > 0) {
-            const sortedPrevias = [...pujasPrevias].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
-            pujaPreviaLiberar = sortedPrevias[0];
-        }
-
-        prevUsuarioId = pujaPreviaLiberar ? (pujaPreviaLiberar.usuarioId ?? pujaPreviaLiberar.UsuarioId) : null;
-        prevMonto = pujaPreviaLiberar ? (pujaPreviaLiberar.monto ?? pujaPreviaLiberar.Monto) : 0;
-
-        if (pujaPreviaLiberar && prevUsuarioId === usuarioActual.id) {
-            // Mismo usuario incrementa su oferta: liberar la retención anterior para contar con los fondos
-            await fetchLiberarSaldo(usuarioActual.id, prevMonto, subastaSeleccionadaSala.id);
-            liberacionMismoUsuarioRealizada = true;
-        }
-
-        await fetchRetenerSaldo(usuarioActual.id, montoInput, subastaSeleccionadaSala.id);
-        retencionRealizada = true;
-
-        if (pujaPreviaLiberar && prevUsuarioId !== usuarioActual.id) {
-            // Se superó la oferta del postor anterior (Outbid): liberar su garantía Escrow
-            await fetchLiberarSaldo(prevUsuarioId, prevMonto, subastaSeleccionadaSala.id);
-            liberacionOtroUsuarioRealizada = true;
-        }
-
-        // Llamada formal a la API REST (o simulación local) para asentar la puja y validar concurrencia optimista
+        // Llamada formal a la API REST para asentar la puja, retener Escrow y validar concurrencia optimista de forma atómica
         const versionActual = Number(subastaSeleccionadaSala.version ?? subastaSeleccionadaSala.Version ?? 1);
         const resPuja = await fetchRegistrarPuja(subastaSeleccionadaSala.id, usuarioActual.id, montoInput, versionActual);
 
@@ -1842,25 +1817,9 @@ async function enviarPuja(event) {
         await cargarLogsAuditoria();
 
     } catch (err) {
-        // Rollback defensivo de fondos si la API rechazó la puja (error 409, 400, red, etc.)
-        if (retencionRealizada) {
-            try {
-                await fetchLiberarSaldo(usuarioActual.id, montoInput, subastaSeleccionadaSala.id);
-                if (liberacionMismoUsuarioRealizada && prevUsuarioId) {
-                    await fetchRetenerSaldo(usuarioActual.id, prevMonto, subastaSeleccionadaSala.id);
-                }
-                if (liberacionOtroUsuarioRealizada && prevUsuarioId) {
-                    await fetchRetenerSaldo(prevUsuarioId, prevMonto, subastaSeleccionadaSala.id);
-                }
-                await actualizarBilleteraUI();
-                await sincronizarSaldosDropdown();
-            } catch (rbErr) {
-                console.error("Error al revertir retención de saldo:", rbErr);
-            }
-        }
-
         await cargarLogsAuditoria();
-        if (err.status === 400 || err.status === 422 || (err.message && err.message.toLowerCase().includes('saldo insuficiente'))) {
+        const errMsg = (err.mensaje || err.message || '').toLowerCase();
+        if (errMsg.includes('saldo') || errMsg.includes('insuficiente') || errMsg.includes('garantía') || errMsg.includes('garantia')) {
             abrirModalSaldoInsuficiente(montoInput);
         } else if (err.status === 409 || err.isConflict) {
             // Manejo específico de concurrencia optimista (HTTP 409 Conflict)

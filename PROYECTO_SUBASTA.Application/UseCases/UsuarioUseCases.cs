@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Application.Commands.Usuarios;
 using PROYECTO_SUBASTA.Application.DTOs;
 using PROYECTO_SUBASTA.Application.Exceptions;
 using PROYECTO_SUBASTA.Application.Repositories;
@@ -12,22 +13,36 @@ namespace PROYECTO_SUBASTA.Application.UseCases
     {
         private readonly IRepository<Usuario> _usuarioRepository;
         private readonly IBilleteraRepository _billeteraRepository;
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IniciarSesionCommandHandler _iniciarSesionHandler;
 
         public UsuarioUseCases(
             IRepository<Usuario> usuarioRepository,
-            IBilleteraRepository billeteraRepository)
+            IBilleteraRepository billeteraRepository,
+            IUnitOfWork unitOfWork,
+            IniciarSesionCommandHandler iniciarSesionHandler)
         {
-            _usuarioRepository = usuarioRepository;
-            _billeteraRepository = billeteraRepository;
+            _usuarioRepository = usuarioRepository ?? throw new ArgumentNullException(nameof(usuarioRepository));
+            _billeteraRepository = billeteraRepository ?? throw new ArgumentNullException(nameof(billeteraRepository));
+            _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+            _iniciarSesionHandler = iniciarSesionHandler ?? throw new ArgumentNullException(nameof(iniciarSesionHandler));
         }
 
-        // Recupera la lista completa de usuarios registrados en el sistema
         public async Task<IEnumerable<Usuario>> ObtenerTodosAsync()
         {
             return await _usuarioRepository.GetAllAsync();
         }
 
-        // Firma requerida por los controladores
+        public async Task<Usuario?> ObtenerPorIdAsync(int id)
+        {
+            return await _usuarioRepository.GetByIdAsync(id);
+        }
+
+        public async Task<IniciarSesionResponseDto> IniciarSesionAsync(string identificador)
+        {
+            return await _iniciarSesionHandler.HandleAsync(new IniciarSesionCommand { Usuario = identificador });
+        }
+
         public async Task<Usuario> CrearUsuarioConBilleteraAsync(string nombre, string email)
         {
             var dto = new CrearUsuarioDto { Nombre = nombre, Email = email };
@@ -41,7 +56,6 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             };
         }
 
-        // Firma desacoplada con DTO
         public async Task<UsuarioResponseDto> CrearUsuarioConBilleteraAsync(CrearUsuarioDto dto)
         {
             if (dto == null)
@@ -59,36 +73,45 @@ namespace PROYECTO_SUBASTA.Application.UseCases
                 throw new ReglaNegocioException("El email del usuario es obligatorio.");
             }
 
-            var usuario = new Usuario
+            await _unitOfWork.BeginTransactionAsync();
+            try
             {
-                Nombre = dto.Nombre.Trim(),
-                Email = dto.Email.Trim(),
-                PasswordHash = "HASH_PRUEBA_123",
-                FechaRegistro = DateTime.UtcNow
-            };
+                var usuario = new Usuario
+                {
+                    Nombre = dto.Nombre.Trim(),
+                    Email = dto.Email.Trim(),
+                    PasswordHash = "HASH_PRUEBA_123",
+                    FechaRegistro = DateTime.UtcNow
+                };
 
-            await _usuarioRepository.AddAsync(usuario);
-            await _usuarioRepository.SaveChangesAsync();
+                await _usuarioRepository.AddAsync(usuario);
+                await _usuarioRepository.SaveChangesAsync();
 
-            var billetera = new Billetera
+                var billetera = new Billetera
+                {
+                    UsuarioId = usuario.Id,
+                    SaldoTotal = 0,
+                    SaldoRetenido = 0,
+                    SaldoDisponible = 0,
+                    Version = 1
+                };
+
+                await _billeteraRepository.AddAsync(billetera);
+                await _unitOfWork.CommitTransactionAsync();
+
+                return new UsuarioResponseDto
+                {
+                    Id = usuario.Id,
+                    Nombre = usuario.Nombre,
+                    Email = usuario.Email,
+                    FechaRegistro = usuario.FechaRegistro
+                };
+            }
+            catch
             {
-                UsuarioId = usuario.Id,
-                SaldoTotal = 0,
-                SaldoRetenido = 0,
-                SaldoDisponible = 0,
-                Version = 1
-            };
-
-            await _billeteraRepository.AddAsync(billetera);
-            await _billeteraRepository.SaveChangesAsync();
-
-            return new UsuarioResponseDto
-            {
-                Id = usuario.Id,
-                Nombre = usuario.Nombre,
-                Email = usuario.Email,
-                FechaRegistro = usuario.FechaRegistro
-            };
+                await _unitOfWork.RollbackTransactionAsync();
+                throw;
+            }
         }
     }
 }
