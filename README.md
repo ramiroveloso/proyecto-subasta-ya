@@ -232,4 +232,3 @@ La interfaz de usuario basada en Single Page Application (SPA) se configuró par
 
 ---
 
-¡Mucho éxito con ese merge y la presentación final ante el docente! Tienen un producto sumamente sólido y bien estructurado.
