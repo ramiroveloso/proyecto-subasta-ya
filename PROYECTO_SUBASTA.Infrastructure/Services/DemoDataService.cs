@@ -38,6 +38,35 @@ namespace PROYECTO_SUBASTA.Infrastructure.Services
             var ahoraUtc = DateTime.UtcNow;
             var subastasMovidas = new System.Collections.Generic.List<int>();
 
+            // Limpieza de subastas no pertenecientes a las semillas oficiales (Id > 5)
+            var subastasExtra = await _context.Subastas.Where(s => s.Id > 5).ToListAsync(cancellationToken);
+            if (subastasExtra.Count > 0)
+            {
+                var idsExtra = subastasExtra.Select(s => s.Id).ToList();
+                var pujasExtra = await _context.Pujas.Where(p => idsExtra.Contains(p.SubastaId)).ToListAsync(cancellationToken);
+                _context.Pujas.RemoveRange(pujasExtra);
+                var ledgersExtra = await _context.TransactionLedgers.Where(t => t.SubastaId.HasValue && idsExtra.Contains(t.SubastaId.Value)).ToListAsync(cancellationToken);
+                _context.TransactionLedgers.RemoveRange(ledgersExtra);
+                _context.Subastas.RemoveRange(subastasExtra);
+                _logger.LogInformation("DemoDataService: {Count} subastas no semilla eliminadas.", subastasExtra.Count);
+            }
+
+            // Limpieza de usuarios no pertenecientes a las semillas oficiales (Id > 4, ej. 'Comprador Dual')
+            var usuariosExtra = await _context.Usuarios.Where(u => u.Id > 4).ToListAsync(cancellationToken);
+            if (usuariosExtra.Count > 0)
+            {
+                var idsUsExtra = usuariosExtra.Select(u => u.Id).ToList();
+                var billeterasExtra = await _context.Billeteras.Where(b => idsUsExtra.Contains(b.UsuarioId)).ToListAsync(cancellationToken);
+                var bIdsExtra = billeterasExtra.Select(b => b.Id).ToList();
+                var ledgersExtraUs = await _context.TransactionLedgers.Where(t => bIdsExtra.Contains(t.BilleteraId)).ToListAsync(cancellationToken);
+                _context.TransactionLedgers.RemoveRange(ledgersExtraUs);
+                _context.Billeteras.RemoveRange(billeterasExtra);
+                var pujasExtraUs = await _context.Pujas.Where(p => idsUsExtra.Contains(p.UsuarioId)).ToListAsync(cancellationToken);
+                _context.Pujas.RemoveRange(pujasExtraUs);
+                _context.Usuarios.RemoveRange(usuariosExtra);
+                _logger.LogInformation("DemoDataService: {Count} usuarios de prueba no semilla eliminados.", usuariosExtra.Count);
+            }
+
             var s1 = await _context.Subastas.FirstOrDefaultAsync(s => s.Id == 1, cancellationToken);
             if (s1 != null)
             {
