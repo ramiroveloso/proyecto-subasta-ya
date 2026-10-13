@@ -297,7 +297,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
         }
 
         [Fact]
-        public async Task AdjudicacionService_SubastaVencidaConPujas_FinalizaYTransfiereFondosEntreBilleteras()
+        public async Task CerrarSubastaHandler_SubastaVencidaConPujas_FinalizaYTransfiereFondosEntreBilleteras()
         {
             // Arrange
             using var context = new SubastaDbContext(_options);
@@ -340,14 +340,19 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             await context.SaveChangesAsync();
 
             var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+            var subastaRepo = new SubastaRepository(context);
+            var billeteraRepo = new BilleteraRepository(context);
+            var ledgerRepo = new Repository<TransactionLedger>(context);
+            var unitOfWork = new UnitOfWork(context);
             var auditoria = new AuditoriaService(context, scopeFactory, NullLogger<AuditoriaService>.Instance);
-            var service = new AdjudicacionService(context, auditoria, NullLogger<AdjudicacionService>.Instance);
+            var handler = new CerrarSubastaCommandHandler(subastaRepo, billeteraRepo, ledgerRepo, unitOfWork, auditoria, NullLogger<CerrarSubastaCommandHandler>.Instance);
 
             // Act
-            var resultado = await service.ProcesarSubastasVencidasAsync();
+            var resultado = await handler.HandleAsync(new CerrarSubastaCommand { SubastaId = 14 });
 
             // Assert
-            Assert.Equal(1, resultado.Finalizadas);
+            Assert.True(resultado.Exitoso);
+            Assert.Equal("FINALIZADA", resultado.Estado);
 
             var subastaFinalizada = await context.Subastas.FirstAsync(s => s.Id == 14);
             Assert.Equal("FINALIZADA", subastaFinalizada.Estado);
@@ -375,7 +380,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
         }
 
         [Fact]
-        public async Task AdjudicacionService_SubastaVencidaSinPujas_PasaADesierta()
+        public async Task CerrarSubastaHandler_SubastaVencidaSinPujas_PasaADesierta()
         {
             // Arrange
             using var context = new SubastaDbContext(_options);
@@ -399,14 +404,19 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             await context.SaveChangesAsync();
 
             var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+            var subastaRepo = new SubastaRepository(context);
+            var billeteraRepo = new BilleteraRepository(context);
+            var ledgerRepo = new Repository<TransactionLedger>(context);
+            var unitOfWork = new UnitOfWork(context);
             var auditoria = new AuditoriaService(context, scopeFactory, NullLogger<AuditoriaService>.Instance);
-            var service = new AdjudicacionService(context, auditoria, NullLogger<AdjudicacionService>.Instance);
+            var handler = new CerrarSubastaCommandHandler(subastaRepo, billeteraRepo, ledgerRepo, unitOfWork, auditoria, NullLogger<CerrarSubastaCommandHandler>.Instance);
 
             // Act
-            var resultado = await service.ProcesarSubastasVencidasAsync();
+            var resultado = await handler.HandleAsync(new CerrarSubastaCommand { SubastaId = 15 });
 
             // Assert
-            Assert.Equal(1, resultado.Desiertas);
+            Assert.True(resultado.Exitoso);
+            Assert.Equal("DESIERTA", resultado.Estado);
 
             var subastaDesierta = await context.Subastas.FirstAsync(s => s.Id == 15);
             Assert.Equal("DESIERTA", subastaDesierta.Estado);
@@ -415,7 +425,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
         }
 
         [Fact]
-        public async Task AdjudicacionService_SubastaProgramadaCumpleFechaInicio_PasaAActiva()
+        public async Task ActivarSubastasProgramadasHandler_CumpleFechaInicio_PasaAActiva()
         {
             // Arrange
             using var context = new SubastaDbContext(_options);
@@ -439,14 +449,16 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             await context.SaveChangesAsync();
 
             var scopeFactory = _serviceProvider.GetRequiredService<IServiceScopeFactory>();
+            var subastaRepo = new SubastaRepository(context);
+            var unitOfWork = new UnitOfWork(context);
             var auditoria = new AuditoriaService(context, scopeFactory, NullLogger<AuditoriaService>.Instance);
-            var service = new AdjudicacionService(context, auditoria, NullLogger<AdjudicacionService>.Instance);
+            var handler = new ActivarSubastasProgramadasCommandHandler(subastaRepo, unitOfWork, auditoria, NullLogger<ActivarSubastasProgramadasCommandHandler>.Instance);
 
             // Act
-            var resultado = await service.ProcesarSubastasVencidasAsync();
+            var activadas = await handler.HandleAsync(new ActivarSubastasProgramadasCommand());
 
             // Assert
-            Assert.Equal(1, resultado.Activadas);
+            Assert.Equal(1, activadas);
 
             var subastaActiva = await context.Subastas.FirstAsync(s => s.Id == 16);
             Assert.Equal("ACTIVA", subastaActiva.Estado);

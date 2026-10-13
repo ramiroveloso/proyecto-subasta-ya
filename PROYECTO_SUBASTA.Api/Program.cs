@@ -1,10 +1,16 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Api.Middlewares;
 using PROYECTO_SUBASTA.Api.Workers;
 using PROYECTO_SUBASTA.Application.Commands.Billeteras;
+using PROYECTO_SUBASTA.Application.Commands.Categorias;
 using PROYECTO_SUBASTA.Application.Commands.Subastas;
 using PROYECTO_SUBASTA.Application.Commands.Usuarios;
+using PROYECTO_SUBASTA.Application.Configuration;
+using PROYECTO_SUBASTA.Application.DTOs;
+using PROYECTO_SUBASTA.Application.Queries.Auditorias;
 using PROYECTO_SUBASTA.Application.Queries.Billeteras;
+using PROYECTO_SUBASTA.Application.Queries.Categorias;
 using PROYECTO_SUBASTA.Application.Queries.Subastas;
 using PROYECTO_SUBASTA.Application.Queries.Usuarios;
 using PROYECTO_SUBASTA.Application.Repositories;
@@ -25,9 +31,47 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableUtcDateTimeJsonConverter());
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errores = context.ModelState
+                .Where(e => e.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value!.Errors.Select(err => string.IsNullOrWhiteSpace(err.ErrorMessage) ? "Valor inválido." : err.ErrorMessage).ToArray()
+                );
+
+            var errorDto = new ErrorResponseDto
+            {
+                StatusCode = StatusCodes.Status400BadRequest,
+                Mensaje = "Uno o más campos presentan errores de validación.",
+                Timestamp = DateTime.UtcNow,
+                Errores = errores
+            };
+
+            return new BadRequestObjectResult(errorDto);
+        };
     });
+
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "SubastaYa API",
+        Version = "v1",
+        Description = "API RESTful para el sistema de subastas en tiempo real SubastaYa (UNAJ)."
+    });
+
+    var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+});
 
 // --- CONFIGURACIÓN DE CORS ---
 builder.Services.AddCors(options =>
@@ -42,18 +86,40 @@ builder.Services.AddCors(options =>
 
 // --- CONFIGURACIÓN DE BASE DE DATOS (MYSQL) ---
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+ServerVersion serverVersion;
+
+if (EF.IsDesignTime)
+{
+    // Solo en tiempo de diseño (ej: dotnet ef migrations add / script) se permite fallback
+    // para posibilitar el scaffolding del modelo si no se dispone de un servidor activo.
+    try
+    {
+        serverVersion = !string.IsNullOrWhiteSpace(connectionString)
+            ? ServerVersion.AutoDetect(connectionString)
+            : new MySqlServerVersion(new Version(8, 0, 36));
+    }
+    catch
+    {
+        serverVersion = new MySqlServerVersion(new Version(8, 0, 36));
+    }
+}
+else
+{
+    // En ejecución normal (dotnet run / producción), la aplicación DEBE conectarse a la base real.
+    // Si la cadena está vacía o el servidor es inaccesible, falla de forma inmediata y visible en el arranque.
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("La cadena de conexión 'DefaultConnection' no fue encontrada ni configurada.");
+    }
+    serverVersion = ServerVersion.AutoDetect(connectionString);
+}
+
 builder.Services.AddDbContext<SubastaDbContext>(options =>
     options.UseMySql(
         connectionString,
-        ServerVersion.AutoDetect(connectionString),
+        serverVersion,
         mySqlOptions =>
         {
-            // ELIMINADO: Se deshabilita EnableRetryOnFailure para permitir transacciones controladas por Unit of Work sin conflicto con MySqlRetryingExecutionStrategy
-            // mySqlOptions.EnableRetryOnFailure(
-            //     maxRetryCount: 5,
-            //     maxRetryDelay: TimeSpan.FromSeconds(5),
-            //     errorNumbersToAdd: null
-            // );
         }
     ));
 
@@ -67,279 +133,68 @@ builder.Services.AddScoped<IBilleteraRepository, BilleteraRepository>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddScoped<IAuditoriaService, AuditoriaService>();
-builder.Services.AddScoped<IAdjudicacionService, AdjudicacionService>();
 
-builder.Services.AddScoped<CategoriaUseCases>();
-builder.Services.AddScoped<SubastaUseCases>();
-builder.Services.AddScoped<UsuarioUseCases>();
 builder.Services.AddScoped<IBilleteraService, BilleteraService>();
+builder.Services.AddScoped<IDemoDataService, DemoDataService>();
+builder.Services.Configure<AntiSnipingOptions>(builder.Configuration.GetSection(AntiSnipingOptions.SectionName));
 
 // Handlers CQRS (Commands)
 builder.Services.AddScoped<RegistrarPujaCommandHandler>();
 builder.Services.AddScoped<CrearSubastaCommandHandler>();
+builder.Services.AddScoped<CrearCategoriaCommandHandler>();
+builder.Services.AddScoped<CrearUsuarioCommandHandler>();
 builder.Services.AddScoped<CargarSaldoCommandHandler>();
 builder.Services.AddScoped<IniciarSesionCommandHandler>();
+builder.Services.AddScoped<CerrarSubastaCommandHandler>();
+builder.Services.AddScoped<ActivarSubastasProgramadasCommandHandler>();
+builder.Services.AddScoped<EjecutarCierresCommandHandler>();
 
 // Handlers CQRS (Queries)
 builder.Services.AddScoped<ObtenerSubastasActivasQueryHandler>();
 builder.Services.AddScoped<ObtenerSubastaPorIdQueryHandler>();
+builder.Services.AddScoped<ObtenerSubastasPorCerrarQueryHandler>();
+builder.Services.AddScoped<ObtenerCategoriasQueryHandler>();
+builder.Services.AddScoped<ObtenerCategoriaPorIdQueryHandler>();
 builder.Services.AddScoped<ObtenerBilleteraPorUsuarioQueryHandler>();
 builder.Services.AddScoped<ObtenerMovimientosQueryHandler>();
 builder.Services.AddScoped<ObtenerUsuariosQueryHandler>();
 builder.Services.AddScoped<ObtenerUsuarioPorIdQueryHandler>();
+builder.Services.AddScoped<ObtenerLogsAuditoriaQueryHandler>();
+builder.Services.AddScoped<ObtenerActividadesUsuarioQueryHandler>();
 
 // ========================================================================
 // 2.3 PROCESO EN SEGUNDO PLANO (BACKGROUND WORKER)
 // ========================================================================
-builder.Services.AddHostedService<SubastaBackgroundWorker>();
+var workerHabilitado = builder.Configuration.GetValue<bool?>("Worker:Habilitado") ?? true;
+if (workerHabilitado)
+{
+    builder.Services.AddHostedService<SubastaBackgroundWorker>();
+}
 
 var app = builder.Build();
 
 // ========================================================================
-// APLICACIÓN DE MIGRACIONES Y DATOS SEMILLA
+// APLICACIÓN DE MIGRACIONES Y SERVICIO DEMO
 // ========================================================================
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
     try
     {
         var context = services.GetRequiredService<SubastaDbContext>();
         context.Database.Migrate();
 
-        if (!context.Categorias.Any())
-        {
-            context.Categorias.AddRange(
-                new Categoria { Id = 1, Nombre = "Tecnología" },
-                new Categoria { Id = 2, Nombre = "Coleccionables" },
-                new Categoria { Id = 3, Nombre = "Indumentaria" },
-                new Categoria { Id = 4, Nombre = "Vehículos" }
-            );
-            context.SaveChanges();
-        }
-
-        // ========================================================================
-        // SINCRONIZACIÓN Y RENOVACIÓN DE SUBASTAS DEMO EN UTC
-        // Garantiza que las subastas de prueba (IDs 1 a 5) permanezcan en su estado previsto:
-        // Subasta 1: ACTIVA (cierra en ~25 min)
-        // Subasta 2: ACTIVA crítica (cierra en ~2 min para anti-sniping)
-        // Subasta 3: PROGRAMADA (+24 hs)
-        // Subasta 4: FINALIZADA (cerrada con ganador: Usuario 2 "Comprador Líder")
-        // Subasta 5: DESIERTA (cerrada sin ofertas)
-        // ========================================================================
-        var ahoraUtc = DateTime.UtcNow;
-
-        var subasta1 = context.Subastas.Include(s => s.Pujas).FirstOrDefault(s => s.Id == 1);
-        if (subasta1 != null)
-        {
-            if (subasta1.FechaFin <= ahoraUtc || subasta1.Estado != "ACTIVA")
-            {
-                subasta1.FechaInicio = ahoraUtc.AddMinutes(-20);
-                subasta1.FechaFin = ahoraUtc.AddMinutes(25);
-                subasta1.Estado = "ACTIVA";
-            }
-            if (subasta1.Version == 0)
-            {
-                subasta1.Version = (uint)(subasta1.Pujas?.Count > 0 ? subasta1.Pujas.Count + 1 : 3);
-            }
-        }
-
-        var subasta2 = context.Subastas.Include(s => s.Pujas).FirstOrDefault(s => s.Id == 2);
-        if (subasta2 != null)
-        {
-            if (subasta2.FechaFin <= ahoraUtc || subasta2.Estado != "ACTIVA")
-            {
-                subasta2.FechaInicio = ahoraUtc.AddMinutes(-58);
-                subasta2.FechaFin = ahoraUtc.AddSeconds(120);
-                subasta2.Estado = "ACTIVA";
-            }
-            if (subasta2.Version == 0)
-            {
-                subasta2.Version = (uint)(subasta2.Pujas?.Count > 0 ? subasta2.Pujas.Count + 1 : 1);
-            }
-        }
-
-        var subasta3 = context.Subastas.Find(3);
-        if (subasta3 != null)
-        {
-            if (subasta3.FechaInicio <= ahoraUtc)
-            {
-                subasta3.FechaInicio = ahoraUtc.AddHours(24);
-                subasta3.FechaFin = ahoraUtc.AddHours(48);
-                subasta3.Estado = "PROGRAMADA";
-            }
-            if (subasta3.Version == 0)
-            {
-                subasta3.Version = 1;
-            }
-        }
-
-        // Subasta 4 (Dato Semilla Obligatorio: Finalizada con ganador Comprador Líder)
-        var subasta4 = context.Subastas.Find(4);
-        if (subasta4 == null)
-        {
-            subasta4 = new Subasta
-            {
-                Id = 4,
-                VendedorId = 1,
-                CategoriaId = 3,
-                Titulo = "Campera de Cuero Vintage",
-                Descripcion = "Indumentaria clásica",
-                UrlImagen = "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500",
-                PrecioBase = 20000.00m,
-                IncrementoMinimo = 2000.00m,
-                FechaInicio = ahoraUtc.AddDays(-2),
-                FechaFin = ahoraUtc.AddHours(-2),
-                Estado = "FINALIZADA",
-                GanadorId = 2, // Comprador Líder
-                PrecioFinal = 25000.00m,
-                Version = 2
-            };
-            context.Subastas.Add(subasta4);
-        }
-        else
-        {
-            subasta4.FechaInicio = ahoraUtc.AddDays(-2);
-            subasta4.FechaFin = ahoraUtc.AddHours(-2);
-            subasta4.Estado = "FINALIZADA";
-            subasta4.GanadorId = 2; // Usuario con distinción de Comprador (Comprador Líder)
-            subasta4.PrecioFinal = 25000.00m;
-            if (subasta4.Version == 0) subasta4.Version = 2;
-        }
-
-        // Subasta 5 (Dato Semilla Obligatorio: DESIERTA sin ofertas)
-        var subasta5 = context.Subastas.Find(5);
-        if (subasta5 == null)
-        {
-            subasta5 = new Subasta
-            {
-                Id = 5,
-                VendedorId = 1,
-                CategoriaId = 4,
-                Titulo = "Repuesto Clásico de Vehículo",
-                Descripcion = "Sin ofertas registradas",
-                UrlImagen = "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500",
-                PrecioBase = 80000.00m,
-                IncrementoMinimo = 10000.00m,
-                FechaInicio = ahoraUtc.AddDays(-3),
-                FechaFin = ahoraUtc.AddDays(-1),
-                Estado = "DESIERTA",
-                GanadorId = null,
-                PrecioFinal = null,
-                Version = 1
-            };
-            context.Subastas.Add(subasta5);
-        }
-        else
-        {
-            subasta5.FechaInicio = ahoraUtc.AddDays(-3);
-            subasta5.FechaFin = ahoraUtc.AddDays(-1);
-            subasta5.Estado = "DESIERTA";
-            subasta5.GanadorId = null;
-            subasta5.PrecioFinal = null;
-            if (subasta5.Version == 0) subasta5.Version = 1;
-
-            // Garantizar que la subasta 5 no tenga pujas asociadas
-            var pujasSub5 = context.Pujas.Where(p => p.SubastaId == 5).ToList();
-            if (pujasSub5.Any())
-            {
-                context.Pujas.RemoveRange(pujasSub5);
-            }
-        }
-
-        // Garantizar que ninguna subasta en la base de datos quede con Version = 0
-        var todasLasSubastas = context.Subastas.Include(s => s.Pujas).ToList();
-        foreach (var s in todasLasSubastas)
-        {
-            if (s.Version == 0)
-            {
-                s.Version = (uint)(s.Pujas != null && s.Pujas.Count > 0 ? s.Pujas.Count + 1 : 1);
-            }
-        }
-
-        // Sincronizar fechas de pujas y movimientos demo de las subastas activas
-        var puja1 = context.Pujas.Find(1);
-        if (puja1 != null) puja1.FechaCreacion = ahoraUtc.AddMinutes(-15);
-        var puja2 = context.Pujas.Find(2);
-        if (puja2 != null) puja2.FechaCreacion = ahoraUtc.AddMinutes(-5);
-
-        // Garantizar puja ganadora para Subasta 4
-        var pujaGanadora4 = context.Pujas.FirstOrDefault(p => p.SubastaId == 4);
-        if (pujaGanadora4 == null)
-        {
-            context.Pujas.Add(new Puja
-            {
-                Id = 3,
-                SubastaId = 4,
-                UsuarioId = 2, // Comprador Líder
-                Monto = 25000.00m,
-                FechaCreacion = ahoraUtc.AddDays(-1)
-            });
-        }
-
-        // Limpieza de asientos falsos de liquidación (PAGO / COBRO) de 25000 no respaldados en las billeteras
-        var falsosAsientosSubasta4 = context.TransactionLedgers
-            .Where(t => t.SubastaId == 4 && (t.Tipo == TipoTransaccion.PAGO || t.Tipo == TipoTransaccion.COBRO))
-            .ToList();
-        if (falsosAsientosSubasta4.Any())
-        {
-            context.TransactionLedgers.RemoveRange(falsosAsientosSubasta4);
-        }
-
-        // Sincronización y consistencia contable de billeteras para usuarios de prueba (3 y 4)
-        var billetera3 = context.Billeteras.FirstOrDefault(b => b.UsuarioId == 3);
-        if (billetera3 != null)
-        {
-            billetera3.SaldoTotal = 200000.00m;
-            billetera3.SaldoRetenido = 0.00m;
-            billetera3.SaldoDisponible = 200000.00m;
-            if (billetera3.Version == 0) billetera3.Version = 1;
-        }
-
-        var billetera4 = context.Billeteras.FirstOrDefault(b => b.UsuarioId == 4);
-        if (billetera4 != null)
-        {
-            billetera4.SaldoTotal = 0.00m;
-            billetera4.SaldoRetenido = 0.00m;
-            billetera4.SaldoDisponible = 0.00m;
-            if (billetera4.Version == 0) billetera4.Version = 1;
-        }
-
-        // Logs de auditoría semilla si la tabla está vacía
-        if (!context.LogsAuditoria.Any())
-        {
-            context.LogsAuditoria.AddRange(
-                new LogAuditoria
-                {
-                    Accion = "CAMBIO_ESTADO_SUBASTA",
-                    Detalle = "Subasta #4 ('Campera de Cuero Vintage') finalizada y adjudicada por Background Worker. Ganador: Usuario #2 (Comprador Líder) con oferta de $25.000,00.",
-                    UsuarioId = 2,
-                    FechaRegistro = ahoraUtc.AddHours(-2)
-                },
-                new LogAuditoria
-                {
-                    Accion = "VENTA_REGISTRADA",
-                    Detalle = "Liquidación final de Subasta #4: Saldo retenido ($25.000,00) de Comprador Líder transferido a Billetera de Vendedor Test.",
-                    UsuarioId = 1,
-                    FechaRegistro = ahoraUtc.AddHours(-2)
-                },
-                new LogAuditoria
-                {
-                    Accion = "CAMBIO_ESTADO_SUBASTA",
-                    Detalle = "Subasta #5 ('Repuesto Clásico de Vehículo') declarada DESIERTA por el Background Worker al vencer el tiempo sin ofertas.",
-                    UsuarioId = null,
-                    FechaRegistro = ahoraUtc.AddDays(-1)
-                }
-            );
-        }
-
-        context.SaveChanges();
+        var demoDataService = services.GetRequiredService<IDemoDataService>();
+        await demoDataService.ReubicarFechasDemoSiCorrespondeAsync();
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "Ocurrió un error al aplicar las migraciones o los datos semilla.");
+        logger.LogCritical(ex, "Fallo crítico al aplicar migraciones o inicializar la base de datos.");
+        throw;
     }
 }
+
 
 // ========================================================================
 // 2. CONFIGURACIÓN DEL PIPELINE DE PETICIONES HTTP (MIDDLEWARES)
@@ -414,3 +269,5 @@ public class NullableUtcDateTimeJsonConverter : System.Text.Json.Serialization.J
         }
     }
 }
+
+public partial class Program { }

@@ -260,6 +260,7 @@
                                         <option value="ACTIVA">Activas</option>
                                         <option value="PROGRAMADA">Próximas</option>
                                         <option value="FINALIZADA">Finalizadas</option>
+                                        <option value="DESIERTA">Desiertas</option>
                                     </select>
                                 </div>
                                 <div class="col-md-3">
@@ -294,20 +295,20 @@
 
                             <form id="form-crear-subasta">
                                 <div class="row g-4">
-                                    <div class="col-md-8">
+                                    <div class="col-lg-8 col-12">
                                         <div class="mb-3">
                                             <label class="form-label fw-semibold">Título del Artículo / Subasta <span class="text-danger">*</span></label>
                                             <input type="text" id="crear-titulo" class="form-control" placeholder="Ej: Reloj Coleccionable de Oro 18k" required>
                                         </div>
 
                                         <div class="row g-3 mb-3">
-                                            <div class="col-md-6">
+                                            <div class="col-sm-6 col-12">
                                                 <label class="form-label fw-semibold">Categoría <span class="text-danger">*</span></label>
                                                 <select id="crear-categoriaId" class="form-select" required>
                                                     <option value="">Cargando categorías...</option>
                                                 </select>
                                             </div>
-                                            <div class="col-md-6">
+                                            <div class="col-sm-6 col-12">
                                                 <label class="form-label fw-semibold">URL de Imagen del Producto</label>
                                                 <input type="url" id="crear-urlImagen" class="form-control" placeholder="https://ejemplo.com/imagen.jpg">
                                             </div>
@@ -319,14 +320,14 @@
                                         </div>
 
                                         <div class="row g-3 mb-3">
-                                            <div class="col-md-6">
+                                            <div class="col-sm-6 col-12">
                                                 <label class="form-label fw-semibold">Precio Base ($ ARS) <span class="text-danger">*</span></label>
                                                 <div class="input-group">
                                                     <span class="input-group-text">$</span>
                                                     <input type="number" id="crear-precioBase" class="form-control" min="1" step="500" value="50000" required>
                                                 </div>
                                             </div>
-                                            <div class="col-md-6">
+                                            <div class="col-sm-6 col-12">
                                                 <label class="form-label fw-semibold">Incremento Mínimo ($ ARS) <span class="text-danger">*</span></label>
                                                 <div class="input-group">
                                                     <span class="input-group-text">$</span>
@@ -336,12 +337,12 @@
                                         </div>
 
                                         <div class="row g-3 mb-4">
-                                            <div class="col-md-6">
+                                            <div class="col-sm-6 col-12">
                                                 <label class="form-label fw-semibold">Fecha y Hora de Inicio <span class="text-danger">*</span></label>
                                                 <input type="datetime-local" id="crear-fechaInicio" class="form-control" required>
                                                 <div class="form-text extra-small text-muted">Huso horario local (Argentina). Se guardará en UTC.</div>
                                             </div>
-                                            <div class="col-md-6">
+                                            <div class="col-sm-6 col-12">
                                                 <label class="form-label fw-semibold">Fecha y Hora de Cierre <span class="text-danger">*</span></label>
                                                 <input type="datetime-local" id="crear-fechaFin" class="form-control" required>
                                                 <div class="form-text extra-small text-muted">Huso horario local (Argentina). Se guardará en UTC.</div>
@@ -359,7 +360,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="col-md-4">
+                                    <div class="col-lg-4 col-12">
                                         <div class="card border bg-light p-3 sticky-top" style="top: 20px;">
                                             <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-eye me-2 text-primary-custom"></i>Vista Previa de Tarjeta</h6>
                                             <div class="card auction-card shadow-sm">
@@ -536,8 +537,8 @@
                             </div>
 
                             <div class="row g-4 mb-4">
-                                <div class="col-md-4">
-                                    <div class="wallet-card-total p-4 shadow-sm">
+                                <div class="col-md-4 d-flex">
+                                    <div class="wallet-card-total p-4 shadow-sm h-100 w-100">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                             <span class="text-white-50 text-uppercase fs-7 fw-bold">1. Saldo Total</span>
                                             <i class="fa-solid fa-vault fs-4 opacity-75"></i>
@@ -546,8 +547,8 @@
                                         <div class="small text-white-50 mt-2">Patrimonio acumulado</div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="wallet-card-retained p-4 shadow-sm">
+                                <div class="col-md-4 d-flex">
+                                    <div class="wallet-card-retained p-4 shadow-sm h-100 w-100">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                             <span class="text-white-50 text-uppercase fs-7 fw-bold">2. Saldo Retenido (Escrow)</span>
                                             <i class="fa-solid fa-lock fs-4 opacity-75"></i>
@@ -556,8 +557,8 @@
                                         <div class="small text-white-50 mt-2">Garantía comprometida en pujas</div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="wallet-card-available p-4 shadow-sm">
+                                <div class="col-md-4 d-flex">
+                                    <div class="wallet-card-available p-4 shadow-sm h-100 w-100">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                             <span class="text-white-50 text-uppercase fs-7 fw-bold">3. Saldo Disponible</span>
                                             <i class="fa-solid fa-wallet fs-4 opacity-75"></i>
@@ -578,7 +579,7 @@
                                     </span>
                                 </div>
                                 <div class="table-responsive">
-                                    <table class="table table-hover align-middle mb-0">
+                                    <table class="table table-hover align-middle mb-0 wallet-ledger-table">
                                         <thead class="table-light extra-small text-uppercase">
                                             <tr>
                                                 <th>Tipo Transacción</th>
@@ -606,22 +607,22 @@
                             </div>
 
                             <div class="row g-3 mb-4">
-                                <div class="col-md-4">
-                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm">
+                                <div class="col-md-4 d-flex">
+                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm h-100 w-100">
                                         <span class="text-muted extra-small text-uppercase d-block fw-bold mb-2">Pujas Realizadas</span>
                                         <span id="stat-total-pujas" class="stat-metric-num text-primary-custom d-block">0</span>
                                         <span class="extra-small text-muted mt-1 d-block"><i class="fa-solid fa-gavel me-1 text-primary-custom"></i>Total acumulado</span>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm">
+                                <div class="col-md-4 d-flex">
+                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm h-100 w-100">
                                         <span class="text-muted extra-small text-uppercase d-block fw-bold mb-2">Subastas Publicadas</span>
                                         <span id="stat-subastas-creadas" class="stat-metric-num text-dark d-block">0</span>
                                         <span class="extra-small text-muted mt-1 d-block"><i class="fa-solid fa-box-archive me-1 text-secondary"></i>Como vendedor</span>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm">
+                                <div class="col-md-4 d-flex">
+                                    <div class="border rounded-3 p-4 bg-light text-center card-stat-metric shadow-sm h-100 w-100">
                                         <span class="text-muted extra-small text-uppercase d-block fw-bold mb-2">Subastas Ganadas</span>
                                         <span id="stat-subastas-ganadas" class="stat-metric-num text-success d-block">0</span>
                                         <span class="extra-small text-muted mt-1 d-block"><i class="fa-solid fa-trophy me-1 text-warning"></i>Adjudicadas</span>

@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Infrastructure.Data;
 using System.Collections.Generic;
@@ -17,6 +17,9 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 
         public async Task<IEnumerable<T>> GetAllAsync()
             => await _context.Set<T>().ToListAsync();
+
+        public async Task<IEnumerable<T>> BuscarAsync(System.Linq.Expressions.Expression<System.Func<T, bool>> predicado)
+            => await _context.Set<T>().Where(predicado).ToListAsync();
 
         public async Task<T?> GetByIdAsync(int id)
             => await _context.Set<T>().FindAsync(id);

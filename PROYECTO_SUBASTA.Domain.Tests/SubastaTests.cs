@@ -213,7 +213,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
         }
 
         [Fact]
-        public void RegistrarPuja_UsaExtensionPorDefectoDe120Segundos()
+        public void RegistrarPuja_AplicaExtensionParametrizadaDe120Segundos()
         {
             // Arrange: Cierra en 30 segundos (< 60s umbral)
             var ahora = DateTime.UtcNow;
@@ -230,15 +230,17 @@ namespace PROYECTO_SUBASTA.Domain.Tests
                 Version = 1
             };
 
-            // Act: Invocación con parámetros por defecto
+            // Act: Invocación con parámetros explícitos provistos
             var resultado = subasta.RegistrarPuja(
                 usuarioId: 2,
                 monto: 12000m,
                 ahoraUtc: ahora,
-                saldoDisponiblePostor: 50000m
+                saldoDisponiblePostor: 50000m,
+                antiSnipingUmbralSegundos: 60,
+                antiSnipingExtensionSegundos: 120
             );
 
-            // Assert: Debe haber extendido 120 segundos por defecto
+            // Assert: Debe haber extendido exactamente 120 segundos
             Assert.True(resultado.AntiSnipingActivado);
             Assert.Equal(fechaFinOriginal.AddSeconds(120), subasta.FechaFin);
         }

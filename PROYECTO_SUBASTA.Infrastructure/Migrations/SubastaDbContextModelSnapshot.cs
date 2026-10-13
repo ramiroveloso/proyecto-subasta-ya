@@ -54,17 +54,24 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                     b.HasIndex("UsuarioId")
                         .IsUnique();
 
-                    b.ToTable("Billeteras");
+                    b.ToTable("Billeteras", t =>
+                        {
+                            t.HasCheckConstraint("CK_Billeteras_SaldoDisponible_NoNegativo", "SaldoDisponible >= 0");
+
+                            t.HasCheckConstraint("CK_Billeteras_SaldoRetenido_NoNegativo", "SaldoRetenido >= 0");
+
+                            t.HasCheckConstraint("CK_Billeteras_SaldoTotal_Consistencia", "SaldoTotal = SaldoRetenido + SaldoDisponible");
+                        });
 
                     b.HasData(
                         new
                         {
                             Id = 1,
-                            SaldoDisponible = 0.00m,
+                            SaldoDisponible = 25000.00m,
                             SaldoRetenido = 0.00m,
-                            SaldoTotal = 0.00m,
+                            SaldoTotal = 25000.00m,
                             UsuarioId = 1,
-                            Version = 0
+                            Version = 1
                         },
                         new
                         {
@@ -73,7 +80,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             SaldoRetenido = 45000.00m,
                             SaldoTotal = 150000.00m,
                             UsuarioId = 2,
-                            Version = 0
+                            Version = 1
                         },
                         new
                         {
@@ -82,16 +89,16 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             SaldoRetenido = 0.00m,
                             SaldoTotal = 200000.00m,
                             UsuarioId = 3,
-                            Version = 0
+                            Version = 1
                         },
                         new
                         {
                             Id = 4,
-                            SaldoDisponible = 500.00m,
+                            SaldoDisponible = 0.00m,
                             SaldoRetenido = 0.00m,
-                            SaldoTotal = 500.00m,
+                            SaldoTotal = 0.00m,
                             UsuarioId = 4,
-                            Version = 0
+                            Version = 1
                         });
                 });
 
@@ -166,7 +173,34 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UsuarioId");
+
                     b.ToTable("LogsAuditoria");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Accion = "CAMBIO_ESTADO_SUBASTA",
+                            Detalle = "Subasta #4 ('Campera de Cuero Vintage') finalizada y adjudicada por Background Worker. Ganador: Usuario #2 (Comprador Líder) con oferta de $25.000,00.",
+                            FechaRegistro = new DateTime(2026, 8, 25, 12, 0, 0, 0, DateTimeKind.Utc),
+                            UsuarioId = 2
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Accion = "VENTA_REGISTRADA",
+                            Detalle = "Liquidación final de Subasta #4: Saldo retenido ($25.000,00) de Comprador Líder transferido a Billetera de Vendedor Test.",
+                            FechaRegistro = new DateTime(2026, 8, 25, 12, 0, 0, 0, DateTimeKind.Utc),
+                            UsuarioId = 1
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Accion = "CAMBIO_ESTADO_SUBASTA",
+                            Detalle = "Subasta #5 ('Repuesto Clásico de Vehículo') declarada DESIERTA por el Background Worker al vencer el tiempo sin ofertas.",
+                            FechaRegistro = new DateTime(2026, 8, 15, 10, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("PROYECTO_SUBASTA.Domain.Entities.Puja", b =>
@@ -196,13 +230,16 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
 
                     b.HasIndex("UsuarioId");
 
-                    b.ToTable("Pujas");
+                    b.ToTable("Pujas", t =>
+                        {
+                            t.HasCheckConstraint("CK_Pujas_Monto_Positivo", "Monto > 0");
+                        });
 
                     b.HasData(
                         new
                         {
                             Id = 1,
-                            FechaCreacion = new DateTime(2026, 9, 15, 1, 56, 57, 740, DateTimeKind.Utc).AddTicks(9308),
+                            FechaCreacion = new DateTime(2026, 9, 1, 10, 15, 0, 0, DateTimeKind.Utc),
                             Monto = 35000.00m,
                             SubastaId = 1,
                             UsuarioId = 3
@@ -210,9 +247,17 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         new
                         {
                             Id = 2,
-                            FechaCreacion = new DateTime(2026, 9, 15, 2, 6, 57, 740, DateTimeKind.Utc).AddTicks(9310),
+                            FechaCreacion = new DateTime(2026, 9, 1, 10, 30, 0, 0, DateTimeKind.Utc),
                             Monto = 45000.00m,
                             SubastaId = 1,
+                            UsuarioId = 2
+                        },
+                        new
+                        {
+                            Id = 3,
+                            FechaCreacion = new DateTime(2026, 8, 22, 15, 0, 0, 0, DateTimeKind.Utc),
+                            Monto = 25000.00m,
+                            SubastaId = 4,
                             UsuarioId = 2
                         });
                 });
@@ -246,13 +291,16 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("IncrementoMinimo")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("PrecioBase")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal?>("PrecioFinal")
-                        .HasColumnType("decimal(65,30)");
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Titulo")
                         .IsRequired()
@@ -273,9 +321,18 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
 
                     b.HasIndex("CategoriaId");
 
+                    b.HasIndex("GanadorId");
+
                     b.HasIndex("VendedorId");
 
-                    b.ToTable("Subastas");
+                    b.ToTable("Subastas", t =>
+                        {
+                            t.HasCheckConstraint("CK_Subastas_FechaFin_Mayor_FechaInicio", "FechaFin > FechaInicio");
+
+                            t.HasCheckConstraint("CK_Subastas_IncrementoMinimo_Positivo", "IncrementoMinimo > 0");
+
+                            t.HasCheckConstraint("CK_Subastas_PrecioBase_Positivo", "PrecioBase > 0");
+                        });
 
                     b.HasData(
                         new
@@ -284,14 +341,14 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 1,
                             Descripcion = "GPU de alta gama para diseño y gaming",
                             Estado = "ACTIVA",
-                            FechaFin = new DateTime(2026, 9, 15, 2, 36, 57, 740, DateTimeKind.Utc).AddTicks(9267),
-                            FechaInicio = new DateTime(2026, 9, 15, 1, 51, 57, 740, DateTimeKind.Utc).AddTicks(9262),
+                            FechaFin = new DateTime(2030, 1, 1, 12, 0, 0, 0, DateTimeKind.Utc),
+                            FechaInicio = new DateTime(2026, 1, 1, 10, 0, 0, 0, DateTimeKind.Utc),
                             IncrementoMinimo = 5000.00m,
                             PrecioBase = 30000.00m,
                             Titulo = "Placa de Video RTX",
                             UrlImagen = "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?w=500",
                             VendedorId = 1,
-                            Version = 0u
+                            Version = 3u
                         },
                         new
                         {
@@ -299,14 +356,14 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 1,
                             Descripcion = "Ideal para estaciones de trabajo",
                             Estado = "ACTIVA",
-                            FechaFin = new DateTime(2026, 9, 15, 2, 13, 27, 740, DateTimeKind.Utc).AddTicks(9271),
-                            FechaInicio = new DateTime(2026, 9, 15, 1, 13, 57, 740, DateTimeKind.Utc).AddTicks(9271),
+                            FechaFin = new DateTime(2030, 1, 1, 10, 5, 0, 0, DateTimeKind.Utc),
+                            FechaInicio = new DateTime(2026, 1, 1, 10, 0, 0, 0, DateTimeKind.Utc),
                             IncrementoMinimo = 5000.00m,
                             PrecioBase = 50000.00m,
                             Titulo = "Procesador de Alta Gama",
                             UrlImagen = "https://images.unsplash.com/photo-1591799264318-7e6ef8ddb7ea?w=500",
                             VendedorId = 1,
-                            Version = 0u
+                            Version = 1u
                         },
                         new
                         {
@@ -314,14 +371,14 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 2,
                             Descripcion = "Arte y diseño exclusivo",
                             Estado = "PROGRAMADA",
-                            FechaFin = new DateTime(2026, 9, 17, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9277),
-                            FechaInicio = new DateTime(2026, 9, 16, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9273),
+                            FechaFin = new DateTime(2030, 1, 12, 10, 0, 0, 0, DateTimeKind.Utc),
+                            FechaInicio = new DateTime(2030, 1, 10, 10, 0, 0, 0, DateTimeKind.Utc),
                             IncrementoMinimo = 2000.00m,
                             PrecioBase = 15000.00m,
                             Titulo = "Figura Coleccionable Edición Limitada",
                             UrlImagen = "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=500",
                             VendedorId = 1,
-                            Version = 0u
+                            Version = 1u
                         },
                         new
                         {
@@ -329,14 +386,16 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 3,
                             Descripcion = "Indumentaria clásica",
                             Estado = "FINALIZADA",
-                            FechaFin = new DateTime(2026, 9, 15, 0, 11, 57, 740, DateTimeKind.Utc).AddTicks(9280),
-                            FechaInicio = new DateTime(2026, 9, 13, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9278),
+                            FechaFin = new DateTime(2026, 1, 5, 12, 0, 0, 0, DateTimeKind.Utc),
+                            FechaInicio = new DateTime(2026, 1, 1, 10, 0, 0, 0, DateTimeKind.Utc),
+                            GanadorId = 2,
                             IncrementoMinimo = 2000.00m,
                             PrecioBase = 20000.00m,
+                            PrecioFinal = 25000.00m,
                             Titulo = "Campera de Cuero Vintage",
                             UrlImagen = "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500",
                             VendedorId = 1,
-                            Version = 0u
+                            Version = 2u
                         },
                         new
                         {
@@ -344,14 +403,14 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                             CategoriaId = 4,
                             Descripcion = "Sin ofertas registradas",
                             Estado = "DESIERTA",
-                            FechaFin = new DateTime(2026, 9, 14, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9282),
-                            FechaInicio = new DateTime(2026, 9, 12, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9282),
+                            FechaFin = new DateTime(2026, 1, 5, 12, 0, 0, 0, DateTimeKind.Utc),
+                            FechaInicio = new DateTime(2026, 1, 1, 10, 0, 0, 0, DateTimeKind.Utc),
                             IncrementoMinimo = 10000.00m,
                             PrecioBase = 80000.00m,
                             Titulo = "Repuesto Clásico de Vehículo",
                             UrlImagen = "https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=500",
                             VendedorId = 1,
-                            Version = 0u
+                            Version = 1u
                         });
                 });
 
@@ -383,25 +442,83 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
 
                     b.HasIndex("BilleteraId");
 
-                    b.ToTable("TransactionLedgers");
+                    b.HasIndex("SubastaId");
+
+                    b.ToTable("TransactionLedgers", t =>
+                        {
+                            t.HasCheckConstraint("CK_TransactionLedgers_Monto_Positivo", "Monto > 0");
+                        });
 
                     b.HasData(
                         new
                         {
                             Id = 1,
-                            BilleteraId = 2,
-                            Fecha = new DateTime(2026, 9, 14, 2, 11, 57, 740, DateTimeKind.Utc).AddTicks(9334),
-                            Monto = 150000.00m,
-                            Tipo = 0
+                            BilleteraId = 1,
+                            Fecha = new DateTime(2026, 8, 25, 12, 0, 0, 0, DateTimeKind.Utc),
+                            Monto = 25000.00m,
+                            SubastaId = 4,
+                            Tipo = 4
                         },
                         new
                         {
                             Id = 2,
                             BilleteraId = 2,
-                            Fecha = new DateTime(2026, 9, 15, 2, 6, 57, 740, DateTimeKind.Utc).AddTicks(9336),
+                            Fecha = new DateTime(2026, 8, 20, 10, 0, 0, 0, DateTimeKind.Utc),
+                            Monto = 175000.00m,
+                            Tipo = 0
+                        },
+                        new
+                        {
+                            Id = 3,
+                            BilleteraId = 2,
+                            Fecha = new DateTime(2026, 8, 22, 15, 0, 0, 0, DateTimeKind.Utc),
+                            Monto = 25000.00m,
+                            SubastaId = 4,
+                            Tipo = 1
+                        },
+                        new
+                        {
+                            Id = 4,
+                            BilleteraId = 2,
+                            Fecha = new DateTime(2026, 8, 25, 12, 0, 0, 0, DateTimeKind.Utc),
+                            Monto = 25000.00m,
+                            SubastaId = 4,
+                            Tipo = 3
+                        },
+                        new
+                        {
+                            Id = 5,
+                            BilleteraId = 2,
+                            Fecha = new DateTime(2026, 9, 1, 10, 30, 0, 0, DateTimeKind.Utc),
                             Monto = 45000.00m,
                             SubastaId = 1,
                             Tipo = 1
+                        },
+                        new
+                        {
+                            Id = 6,
+                            BilleteraId = 3,
+                            Fecha = new DateTime(2026, 8, 30, 9, 0, 0, 0, DateTimeKind.Utc),
+                            Monto = 200000.00m,
+                            Tipo = 0
+                        },
+                        new
+                        {
+                            Id = 7,
+                            BilleteraId = 3,
+                            Fecha = new DateTime(2026, 9, 1, 10, 15, 0, 0, DateTimeKind.Utc),
+                            Monto = 35000.00m,
+                            SubastaId = 1,
+                            Tipo = 1
+                        },
+                        new
+                        {
+                            Id = 8,
+                            BilleteraId = 3,
+                            Fecha = new DateTime(2026, 9, 1, 10, 30, 0, 0, DateTimeKind.Utc),
+                            Monto = 35000.00m,
+                            SubastaId = 1,
+                            Tipo = 2
                         });
                 });
 
@@ -480,6 +597,16 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("PROYECTO_SUBASTA.Domain.Entities.LogAuditoria", b =>
+                {
+                    b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("PROYECTO_SUBASTA.Domain.Entities.Puja", b =>
                 {
                     b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Subasta", "Subasta")
@@ -491,7 +618,7 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                     b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Usuario", "Usuario")
                         .WithMany()
                         .HasForeignKey("UsuarioId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Subasta");
@@ -504,16 +631,23 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                     b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Categoria", "Categoria")
                         .WithMany()
                         .HasForeignKey("CategoriaId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Usuario", "Ganador")
+                        .WithMany()
+                        .HasForeignKey("GanadorId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Usuario", "Vendedor")
                         .WithMany()
                         .HasForeignKey("VendedorId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Categoria");
+
+                    b.Navigation("Ganador");
 
                     b.Navigation("Vendedor");
                 });
@@ -526,7 +660,14 @@ namespace PROYECTO_SUBASTA.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("PROYECTO_SUBASTA.Domain.Entities.Subasta", "Subasta")
+                        .WithMany()
+                        .HasForeignKey("SubastaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Billetera");
+
+                    b.Navigation("Subasta");
                 });
 
             modelBuilder.Entity("PROYECTO_SUBASTA.Domain.Entities.Billetera", b =>

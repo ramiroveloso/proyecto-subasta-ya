@@ -17,6 +17,8 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
         public uint Version { get; set; }
         public DateTime FechaFin { get; set; }
         public bool AntiSnipingActivado { get; set; }
+        public int LiderId { get; set; }
+        public string? Lider { get; set; }
         public PujaItemDto Puja { get; set; } = null!;
     }
 }

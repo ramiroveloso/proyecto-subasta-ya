@@ -1,28 +1,29 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace PROYECTO_SUBASTA.Application.DTOs
 {
     /// <summary>
-    /// DTO para la creación y parametrización de una nueva subasta.
+    /// DTO para la creacion y parametrizacion de una nueva subasta con validaciones declarativas estrictas.
     /// </summary>
-    public class CrearSubastaDto
+    public class CrearSubastaDto : IValidatableObject
     {
-        [Required(ErrorMessage = "El título de la subasta es obligatorio.")]
-        [StringLength(150, MinimumLength = 3, ErrorMessage = "El título debe tener entre 3 y 150 caracteres.")]
+        [Required(ErrorMessage = "El titulo de la subasta es obligatorio.")]
+        [StringLength(150, MinimumLength = 3, ErrorMessage = "El titulo debe tener entre 3 y 150 caracteres.")]
         public string Titulo { get; set; } = string.Empty;
 
-        [StringLength(1000, ErrorMessage = "La descripción no puede superar los 1000 caracteres.")]
+        [StringLength(1000, ErrorMessage = "La descripcion no puede superar los 1000 caracteres.")]
         public string Descripcion { get; set; } = string.Empty;
 
-        [Url(ErrorMessage = "La URL de la imagen debe ser una dirección web válida.")]
+        [Required(ErrorMessage = "La URL de la imagen es obligatoria.")]
+        [Url(ErrorMessage = "La URL de la imagen debe ser una direccion web valida.")]
         public string UrlImagen { get; set; } = string.Empty;
 
         [Range(0.01, double.MaxValue, ErrorMessage = "El precio base debe ser mayor a cero.")]
         public decimal PrecioBase { get; set; }
 
-        [Range(0.01, double.MaxValue, ErrorMessage = "El incremento mínimo debe ser mayor a cero.")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "El incremento minimo debe ser mayor a cero.")]
         public decimal IncrementoMinimo { get; set; }
 
         [Required(ErrorMessage = "La fecha de inicio es obligatoria.")]
@@ -31,15 +32,48 @@ namespace PROYECTO_SUBASTA.Application.DTOs
         [Required(ErrorMessage = "La fecha de fin es obligatoria.")]
         public DateTime FechaFin { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar una categoría válida.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar una categoria valida.")]
         public int CategoriaId { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un vendedor válido.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un vendedor valido.")]
         public int VendedorId { get; set; }
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            if (string.IsNullOrWhiteSpace(Titulo))
+            {
+                yield return new ValidationResult("El titulo de la subasta no puede estar vacio ni contener solo espacios.", new[] { nameof(Titulo) });
+            }
+
+            if (!string.IsNullOrWhiteSpace(UrlImagen))
+            {
+                if (!Uri.TryCreate(UrlImagen, UriKind.Absolute, out var uriResult) ||
+                    (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
+                {
+                    yield return new ValidationResult(
+                        "La URL de la imagen debe ser una URL absoluta con protocolo http o https.",
+                        new[] { nameof(UrlImagen) });
+                }
+            }
+
+            if (FechaFin <= FechaInicio)
+            {
+                yield return new ValidationResult(
+                    "La fecha de finalizacion debe ser posterior a la fecha de inicio.",
+                    new[] { nameof(FechaFin) });
+            }
+
+            if (FechaFin <= DateTime.UtcNow)
+            {
+                yield return new ValidationResult(
+                    "La fecha de finalizacion debe ser una fecha futura.",
+                    new[] { nameof(FechaFin) });
+            }
+        }
     }
 
     /// <summary>
-    /// DTO de lectura completo para exponer el estado de la subasta y su oferta más alta.
+    /// DTO de lectura completo para exponer el estado de la subasta y su oferta mas alta.
     /// </summary>
     public class SubastaResponseDto
     {
@@ -73,9 +107,4 @@ namespace PROYECTO_SUBASTA.Application.DTOs
         public DateTime FechaCreacion { get; set; }
         public string PostorAnonimo { get; set; } = string.Empty;
     }
-
-    /// <summary>
-    /// DTO de entrada para registrar una nueva oferta con soporte de Concurrencia Optimista.
-    /// </summary>
-    
 }

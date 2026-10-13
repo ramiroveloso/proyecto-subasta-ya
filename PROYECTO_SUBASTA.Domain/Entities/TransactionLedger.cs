@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -31,5 +31,6 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         public DateTime Fecha { get; set; } = DateTime.UtcNow;
 
         public int? SubastaId { get; set; }
+        public Subasta? Subasta { get; set; }
     }
 }

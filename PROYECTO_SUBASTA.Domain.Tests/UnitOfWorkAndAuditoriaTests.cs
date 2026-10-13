@@ -58,8 +58,8 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             // Iniciar transacción de negocio
             await unitOfWork.BeginTransactionAsync();
 
-            // 1. Mutar entidad de negocio (billetera)
-            var billetera = await context.Billeteras.FindAsync(1);
+            // 1. Mutar entidad de negocio (billetera 4, que tiene saldo inicial $0 según Rúbrica A06)
+            var billetera = await context.Billeteras.FindAsync(4);
             Assert.NotNull(billetera);
             billetera.CargarSaldo(50000m);
 
@@ -67,7 +67,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             await auditoriaService.RegistrarAsync(
                 "PUJA_REGISTRADA",
                 "Puja exitosa registrada para Subasta #1",
-                usuarioId: 1
+                usuarioId: 4
             );
 
             // Act: Simular que la operación falla (por OCC, validación o error) y se invoca Rollback
@@ -75,7 +75,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             // Assert: Verificar en un nuevo contexto que NO quedaron logs fantasma ni saldo modificado
             using var assertContext = new SubastaDbContext(_options);
-            var billeteraSinModificar = await assertContext.Billeteras.FindAsync(1);
+            var billeteraSinModificar = await assertContext.Billeteras.FindAsync(4);
             Assert.NotNull(billeteraSinModificar);
             Assert.Equal(0m, billeteraSinModificar.SaldoTotal);
 
@@ -99,7 +99,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             await unitOfWork.BeginTransactionAsync();
 
-            var billetera = await context.Billeteras.FindAsync(1);
+            var billetera = await context.Billeteras.FindAsync(4);
             Assert.NotNull(billetera);
             billetera.CargarSaldo(30000m);
 
@@ -107,7 +107,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             await auditoriaService.RegistrarAsync(
                 "PUJA_TRANSACCIONAL",
                 "Intento de puja",
-                usuarioId: 1
+                usuarioId: 4
             );
 
             // Act: Simular captura de conflicto OCC y ejecución defensiva de Rollback
@@ -132,7 +132,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             Assert.Empty(logsFantasma);
 
-            var billeteraSinCambios = await assertContext.Billeteras.FindAsync(1);
+            var billeteraSinCambios = await assertContext.Billeteras.FindAsync(4);
             Assert.NotNull(billeteraSinCambios);
             Assert.Equal(0m, billeteraSinCambios.SaldoTotal);
         }
@@ -151,21 +151,21 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             // Act
             await unitOfWork.BeginTransactionAsync();
 
-            var billetera = await context.Billeteras.FindAsync(1);
+            var billetera = await context.Billeteras.FindAsync(4);
             Assert.NotNull(billetera);
             billetera.CargarSaldo(75000m);
 
             await auditoriaService.RegistrarAsync(
                 "PUJA_CONFIRMADA",
                 "Puja confirmada y persistida en UnitOfWork",
-                usuarioId: 1
+                usuarioId: 4
             );
 
             await unitOfWork.CommitTransactionAsync();
 
             // Assert
             using var assertContext = new SubastaDbContext(_options);
-            var billeteraActualizada = await assertContext.Billeteras.FindAsync(1);
+            var billeteraActualizada = await assertContext.Billeteras.FindAsync(4);
             Assert.NotNull(billeteraActualizada);
             Assert.Equal(75000m, billeteraActualizada.SaldoTotal);
 
@@ -173,7 +173,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
                 .FirstOrDefaultAsync(l => l.Accion == "PUJA_CONFIRMADA");
 
             Assert.NotNull(logGuardado);
-            Assert.Equal(1, logGuardado.UsuarioId);
+            Assert.Equal(4, logGuardado.UsuarioId);
         }
 
         [Fact]
@@ -217,7 +217,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             Assert.NotNull(tx1);
             Assert.Same(tx1, tx2);
 
-            var billetera = await context.Billeteras.FindAsync(1);
+            var billetera = await context.Billeteras.FindAsync(4);
             Assert.NotNull(billetera);
             billetera.CargarSaldo(12345m);
 
@@ -225,9 +225,39 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             // Assert: Cambios confirmados en la base de datos
             using var assertContext = new SubastaDbContext(_options);
-            var billeteraPersistida = await assertContext.Billeteras.FindAsync(1);
+            var billeteraPersistida = await assertContext.Billeteras.FindAsync(4);
             Assert.NotNull(billeteraPersistida);
             Assert.Equal(12345m, billeteraPersistida.SaldoTotal);
+        }
+
+        [Fact]
+        public async Task LogAuditoria_IntentoDeModificacion_LanzaInvalidOperationExceptionYNoSeGuarda()
+        {
+            // Arrange
+            using var context = new SubastaDbContext(_options);
+            var log = await context.LogsAuditoria.FirstAsync();
+
+            // Act
+            log.Detalle = "Intento de alteración indebida de auditoría histórica";
+
+            // Assert: SaveChangesAsync debe rechazar modificaciones en entidades append-only
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            Assert.Contains("inmutables", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task LogAuditoria_IntentoDeEliminacion_LanzaInvalidOperationExceptionYNoSeGuarda()
+        {
+            // Arrange
+            using var context = new SubastaDbContext(_options);
+            var log = await context.LogsAuditoria.FirstAsync();
+
+            // Act
+            context.LogsAuditoria.Remove(log);
+
+            // Assert: SaveChangesAsync debe rechazar eliminación en entidades append-only
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            Assert.Contains("inmutables", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

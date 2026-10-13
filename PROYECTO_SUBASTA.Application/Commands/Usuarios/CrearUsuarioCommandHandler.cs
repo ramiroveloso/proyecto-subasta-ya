@@ -1,74 +1,42 @@
 using System;
-using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
-using PROYECTO_SUBASTA.Application.Commands.Usuarios;
 using PROYECTO_SUBASTA.Application.DTOs;
 using PROYECTO_SUBASTA.Application.Exceptions;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Domain.Entities;
 
-namespace PROYECTO_SUBASTA.Application.UseCases
+namespace PROYECTO_SUBASTA.Application.Commands.Usuarios
 {
-    public class UsuarioUseCases
+    public class CrearUsuarioCommandHandler
     {
         private readonly IRepository<Usuario> _usuarioRepository;
         private readonly IBilleteraRepository _billeteraRepository;
         private readonly IUnitOfWork _unitOfWork;
-        private readonly IniciarSesionCommandHandler _iniciarSesionHandler;
 
-        public UsuarioUseCases(
+        public CrearUsuarioCommandHandler(
             IRepository<Usuario> usuarioRepository,
             IBilleteraRepository billeteraRepository,
-            IUnitOfWork unitOfWork,
-            IniciarSesionCommandHandler iniciarSesionHandler)
+            IUnitOfWork unitOfWork)
         {
             _usuarioRepository = usuarioRepository ?? throw new ArgumentNullException(nameof(usuarioRepository));
             _billeteraRepository = billeteraRepository ?? throw new ArgumentNullException(nameof(billeteraRepository));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
-            _iniciarSesionHandler = iniciarSesionHandler ?? throw new ArgumentNullException(nameof(iniciarSesionHandler));
         }
 
-        public async Task<IEnumerable<Usuario>> ObtenerTodosAsync()
+        public async Task<UsuarioResponseDto> HandleAsync(CrearUsuarioCommand command, CancellationToken cancellationToken = default)
         {
-            return await _usuarioRepository.GetAllAsync();
-        }
-
-        public async Task<Usuario?> ObtenerPorIdAsync(int id)
-        {
-            return await _usuarioRepository.GetByIdAsync(id);
-        }
-
-        public async Task<IniciarSesionResponseDto> IniciarSesionAsync(string identificador)
-        {
-            return await _iniciarSesionHandler.HandleAsync(new IniciarSesionCommand { Usuario = identificador });
-        }
-
-        public async Task<Usuario> CrearUsuarioConBilleteraAsync(string nombre, string email)
-        {
-            var dto = new CrearUsuarioDto { Nombre = nombre, Email = email };
-            var response = await CrearUsuarioConBilleteraAsync(dto);
-
-            return new Usuario
-            {
-                Id = response.Id,
-                Nombre = response.Nombre,
-                Email = response.Email
-            };
-        }
-
-        public async Task<UsuarioResponseDto> CrearUsuarioConBilleteraAsync(CrearUsuarioDto dto)
-        {
-            if (dto == null)
+            if (command == null)
             {
                 throw new ReglaNegocioException("Los datos del usuario son obligatorios.");
             }
 
-            if (string.IsNullOrWhiteSpace(dto.Nombre))
+            if (string.IsNullOrWhiteSpace(command.Nombre))
             {
                 throw new ReglaNegocioException("El nombre del usuario es obligatorio.");
             }
 
-            if (string.IsNullOrWhiteSpace(dto.Email))
+            if (string.IsNullOrWhiteSpace(command.Email))
             {
                 throw new ReglaNegocioException("El email del usuario es obligatorio.");
             }
@@ -78,8 +46,8 @@ namespace PROYECTO_SUBASTA.Application.UseCases
             {
                 var usuario = new Usuario
                 {
-                    Nombre = dto.Nombre.Trim(),
-                    Email = dto.Email.Trim(),
+                    Nombre = command.Nombre.Trim(),
+                    Email = command.Email.Trim(),
                     PasswordHash = "HASH_PRUEBA_123",
                     FechaRegistro = DateTime.UtcNow
                 };

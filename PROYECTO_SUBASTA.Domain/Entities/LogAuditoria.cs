@@ -1,4 +1,4 @@
-﻿namespace PROYECTO_SUBASTA.Domain.Entities
+namespace PROYECTO_SUBASTA.Domain.Entities
 {
     public class LogAuditoria
     {
@@ -7,5 +7,6 @@
         public string Accion { get; set; } = string.Empty;
         public string Detalle { get; set; } = string.Empty;
         public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;
+        public Usuario? Usuario { get; set; }
     }
 }

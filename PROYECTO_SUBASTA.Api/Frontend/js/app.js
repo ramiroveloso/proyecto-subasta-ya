@@ -10,6 +10,9 @@ let categoriasCache = [];
 let subastaSeleccionadaSala = null;
 let timerSalaInterval = null;
 let timerCardsInterval = null;
+let timerPollingInterval = null;
+let cicloPollingCount = 0;
+let saldoDisponibleUsuarioActual = 0;
 let contadorSyncInterval = 0;
 
 /* ==========================================================================
@@ -522,6 +525,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     timerCardsInterval = setInterval(actualizarTemporizadoresCatalogo, 1000);
+    iniciarPollingEnVivo();
 });
 
 /* ==========================================================================
@@ -694,7 +698,7 @@ async function cargarSaldoLibreRapido(monto) {
         await renderizarSelectorPerfilesSemilla();
         await cargarLogsAuditoria();
     } catch (e) {
-        mostrarToast(`Error al recargar: ${e.message}`, 'Error', 'danger');
+        mostrarToast(`Error al recargar: ${e.mensaje || e.message}`, 'Error', 'danger');
     }
 }
 
@@ -768,11 +772,11 @@ function renderizarSkeletonsBilletera(filas = 4) {
     for (let i = 0; i < filas; i++) {
         skeletonsHtml += `
             <tr>
-                <td><div class="skeleton-box" style="width: 120px; height: 20px; border-radius: 12px;"></div></td>
-                <td><div class="skeleton-box" style="width: 80px; height: 18px;"></div></td>
-                <td><div class="skeleton-box" style="width: 130px; height: 14px;"></div></td>
-                <td><div class="skeleton-box" style="width: 160px; height: 14px;"></div></td>
-                <td><div class="skeleton-box" style="width: 90px; height: 14px;"></div></td>
+                <td data-label="Tipo"><div class="skeleton-box" style="width: 120px; height: 20px; border-radius: 12px;"></div></td>
+                <td data-label="Monto"><div class="skeleton-box" style="width: 80px; height: 18px;"></div></td>
+                <td data-label="Fecha"><div class="skeleton-box" style="width: 130px; height: 14px;"></div></td>
+                <td data-label="Concepto"><div class="skeleton-box" style="width: 160px; height: 14px;"></div></td>
+                <td data-label="Estado"><div class="skeleton-box" style="width: 90px; height: 14px;"></div></td>
             </tr>
         `;
     }
@@ -802,7 +806,9 @@ async function aplicarFiltros() {
             let coincideEstado = true;
             if (estadoFiltro) {
                 if (estadoFiltro === 'FINALIZADA') {
-                    coincideEstado = (estadoReal === 'FINALIZADA' || estadoReal === 'DESIERTA');
+                    coincideEstado = (estadoReal === 'FINALIZADA');
+                } else if (estadoFiltro === 'DESIERTA') {
+                    coincideEstado = (estadoReal === 'DESIERTA');
                 } else {
                     coincideEstado = (estadoReal === estadoFiltro);
                 }
@@ -1291,12 +1297,20 @@ async function guardarSubasta(event) {
         }
 
     } catch (err) {
+        const mensajeError = err.mensaje || err.message || 'Error inesperado al publicar la subasta.';
         if (feedback) {
             feedback.className = 'validation-feedback-box alert alert-danger py-2 small mb-3';
-            feedback.innerHTML = `<i class="fa-solid fa-circle-exclamation me-1"></i> Error al publicar: ${err.message}`;
+            feedback.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div><i class="fa-solid fa-circle-exclamation me-1"></i> Error al publicar: ${mensajeError}</div>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 extra-small" onclick="document.getElementById('form-crear-subasta').dispatchEvent(new Event('submit'))">
+                        <i class="fa-solid fa-rotate-right me-1"></i>Reintentar
+                    </button>
+                </div>
+            `;
             feedback.classList.remove('d-none');
         }
-        mostrarToast(`Error al crear subasta: ${err.message}`, 'Error de Servidor', 'danger');
+        mostrarToast(`Error al crear subasta: ${mensajeError}`, 'Error de Publicación', 'danger');
     } finally {
         setBotonCargando('btn-crear-subasta', 'spinner-crear', 'text-crear', false);
     }
@@ -1488,6 +1502,7 @@ function setMontoPujaSugerido(offset) {
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
     const inputPuja = document.getElementById('input-monto-puja');
     if (inputPuja) {
+        inputPuja.dataset.modificadoManual = 'false';
         inputPuja.value = pujaActual + offset;
         validarPujaEnVivo();
     }
@@ -1497,28 +1512,45 @@ function actualizarMonitorPujasSala() {
     if (!subastaSeleccionadaSala) return;
 
     const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
-    document.getElementById('sala-puja-actual').textContent = `$${pujaActual.toLocaleString('es-AR')}`;
+    const elemPujaActual = document.getElementById('sala-puja-actual');
+    if (elemPujaActual) {
+        elemPujaActual.textContent = `$${pujaActual.toLocaleString('es-AR')}`;
+    }
 
     const bannerLiderazgo = document.getElementById('sala-banner-liderazgo');
+    const elemEstadoOferta = document.getElementById('sala-lider-actual');
     const pujas = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
 
     if (pujas.length > 0) {
         const pujasSorted = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
         const mayorPuja = pujasSorted[0];
-        const esMiPuja = (mayorPuja.usuarioId ?? mayorPuja.UsuarioId) === usuarioActual.id;
+        const uidMayor = mayorPuja.usuarioId ?? mayorPuja.UsuarioId;
+        const esMiPuja = usuarioActual && uidMayor === usuarioActual.id;
+        const usuarioParticipo = usuarioActual && pujas.some(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
+        const anonLider = mayorPuja.postorAnonimo || `Postor #${(uidMayor * 33 + 100).toString(16).toUpperCase()}`;
 
-        if (esMiPuja) {
-            bannerLiderazgo.className = 'status-banner-leading p-3 mb-3 d-flex align-items-center';
-            bannerLiderazgo.innerHTML = `
-                <i class="fa-solid fa-trophy fs-3 me-3 text-warning"></i>
-                <div>
-                    <h6 class="fw-bold mb-0">¡ESTÁS LIDERANDO LA PUJA! (${usuarioActual.nombre})</h6>
-                    <small>Tu oferta de $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')} es la mayor actual y se encuentra retenida en garantía Escrow.</small>
-                </div>
-            `;
-        } else {
-            const usuarioParticipo = pujas.some(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
-            if (usuarioParticipo) {
+        // Actualizar Badge de Estado de Oferta (F03)
+        if (elemEstadoOferta) {
+            if (esMiPuja) {
+                elemEstadoOferta.innerHTML = '<span class="badge bg-success font-monospace px-2 py-1"><i class="fa-solid fa-crown me-1"></i>ERES LÍDER</span>';
+            } else if (usuarioParticipo) {
+                elemEstadoOferta.innerHTML = '<span class="badge bg-danger font-monospace px-2 py-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>SUPERADO</span>';
+            } else {
+                elemEstadoOferta.innerHTML = `<span class="badge bg-primary font-monospace px-2 py-1"><i class="fa-solid fa-gavel me-1"></i>LÍDER: ${anonLider}</span>`;
+            }
+        }
+
+        if (bannerLiderazgo) {
+            if (esMiPuja) {
+                bannerLiderazgo.className = 'status-banner-leading p-3 mb-3 d-flex align-items-center';
+                bannerLiderazgo.innerHTML = `
+                    <i class="fa-solid fa-trophy fs-3 me-3 text-warning"></i>
+                    <div>
+                        <h6 class="fw-bold mb-0">¡ESTÁS LIDERANDO LA PUJA! (${usuarioActual.nombre})</h6>
+                        <small>Tu oferta de $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')} es la mayor actual y se encuentra retenida en garantía Escrow.</small>
+                    </div>
+                `;
+            } else if (usuarioParticipo) {
                 bannerLiderazgo.className = 'status-banner-outbid p-3 mb-3 d-flex align-items-center';
                 bannerLiderazgo.innerHTML = `
                     <i class="fa-solid fa-triangle-exclamation fs-3 me-3 text-danger"></i>
@@ -1533,21 +1565,26 @@ function actualizarMonitorPujasSala() {
                     <i class="fa-solid fa-info-circle fs-3 me-3"></i>
                     <div>
                         <h6 class="fw-bold mb-0">Puja Líder Actual: $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')}</h6>
-                        <small>Inicia tu puja para ingresar al remate en vivo.</small>
+                        <small>Postor actual a la delantera: <strong>${anonLider}</strong>. Realiza una oferta para participar.</small>
                     </div>
                 `;
             }
         }
     } else {
         const precioBase = subastaSeleccionadaSala.precioBase ?? subastaSeleccionadaSala.PrecioBase ?? 0;
-        bannerLiderazgo.className = 'alert alert-light border p-3 mb-3 d-flex align-items-center';
-        bannerLiderazgo.innerHTML = `
-            <i class="fa-solid fa-gavel fs-3 me-3 text-secondary"></i>
-            <div>
-                <h6 class="fw-bold mb-0">Sin ofertas registradas</h6>
-                <small>Sé el primer postor realizando una oferta desde el precio base de $${precioBase.toLocaleString('es-AR')}.</small>
-            </div>
-        `;
+        if (elemEstadoOferta) {
+            elemEstadoOferta.innerHTML = '<span class="badge bg-secondary font-monospace"><i class="fa-regular fa-circle-question me-1"></i>Sin ofertas</span>';
+        }
+        if (bannerLiderazgo) {
+            bannerLiderazgo.className = 'alert alert-light border p-3 mb-3 d-flex align-items-center';
+            bannerLiderazgo.innerHTML = `
+                <i class="fa-solid fa-gavel fs-3 me-3 text-secondary"></i>
+                <div>
+                    <h6 class="fw-bold mb-0">Sin ofertas registradas</h6>
+                    <small>Sé el primer postor realizando una oferta desde el precio base de $${precioBase.toLocaleString('es-AR')}.</small>
+                </div>
+            `;
+        }
     }
 
     const listaHistorial = document.getElementById('sala-historial-pujas');
@@ -1675,12 +1712,15 @@ async function validarPujaEnVivo() {
     }
 
     // 5. Validar saldo disponible en billetera (si ya es líder, solo requiere cubrir el incremento)
-    let saldoDisponible = 0;
-    try {
-        const b = await fetchObtenerBilletera(usuarioActual.id);
-        saldoDisponible = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
-    } catch (_) {
-        saldoDisponible = usuarioActual.saldoInicial || 0;
+    let saldoDisponible = saldoDisponibleUsuarioActual;
+    if ((saldoDisponible === null || saldoDisponible === undefined || saldoDisponible === 0) && usuarioActual) {
+        try {
+            const b = await fetchObtenerBilletera(usuarioActual.id);
+            saldoDisponible = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
+            saldoDisponibleUsuarioActual = saldoDisponible;
+        } catch (_) {
+            saldoDisponible = usuarioActual.saldoInicial || 0;
+        }
     }
 
     const garantiaRequerida = esMiPujaLider ? Math.max(0, montoIngresado - montoLiderPrevio) : montoIngresado;
@@ -1806,6 +1846,11 @@ async function enviarPuja(event) {
             mostrarToast(`¡Oferta enviada por $${montoInput.toLocaleString('es-AR')}! Retenido en Escrow.`, 'Oferta Exitosa', 'success');
         }
 
+        const inputPujaElem = document.getElementById('input-monto-puja');
+        if (inputPujaElem) {
+            inputPujaElem.dataset.modificadoManual = 'false';
+        }
+
         actualizarMonitorPujasSala();
         configurarBotonesPujaRapida(incrementoMin);
         actualizarTarjetaCatalogo(subastaSeleccionadaSala.id, montoInput);
@@ -1818,35 +1863,54 @@ async function enviarPuja(event) {
 
     } catch (err) {
         await cargarLogsAuditoria();
-        const errMsg = (err.mensaje || err.message || '').toLowerCase();
-        if (errMsg.includes('saldo') || errMsg.includes('insuficiente') || errMsg.includes('garantía') || errMsg.includes('garantia')) {
+        const mensajeError = err.mensaje || err.message || 'Error al procesar la oferta.';
+        const errMsgLower = mensajeError.toLowerCase();
+
+        if (errMsgLower.includes('saldo') || errMsgLower.includes('insuficiente') || errMsgLower.includes('garantía') || errMsgLower.includes('garantia')) {
             abrirModalSaldoInsuficiente(montoInput);
+            mostrarToast(`Fondos insuficientes: ${mensajeError}`, 'Saldo Insuficiente (400)', 'danger');
         } else if (err.status === 409 || err.isConflict) {
             // Manejo específico de concurrencia optimista (HTTP 409 Conflict)
             try {
                 const subFresca = await fetchObtenerSubastaPorId(subastaSeleccionadaSala.id);
-                subastaSeleccionadaSala.version = subFresca.version ?? subFresca.Version ?? 1;
-                subastaSeleccionadaSala.pujas = subFresca.pujas ?? subFresca.Pujas ?? [];
-                subastaSeleccionadaSala.fechaFin = subFresca.fechaFin ?? subFresca.FechaFin;
-                
-                // Refrescar caché y tarjetas
-                const idx = subastasCache.findIndex(s => (s.id ?? s.Id) === subastaSeleccionadaSala.id);
-                if (idx !== -1) {
-                    subastasCache[idx] = { ...subastasCache[idx], ...subFresca };
-                }
+                if (subFresca) {
+                    subastaSeleccionadaSala = { ...subFresca };
+                    if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
+                    
+                    const idx = subastasCache.findIndex(s => (s.id ?? s.Id) === subastaSeleccionadaSala.id);
+                    if (idx !== -1) {
+                        subastasCache[idx] = { ...subastasCache[idx], ...subFresca };
+                    }
 
-                actualizarMonitorPujasSala();
-                actualizarTarjetasCatalogo();
-                configurarBotonesPujaRapida(subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000);
+                    actualizarMonitorPujasSala();
+                    actualizarTarjetasCatalogo();
+                    configurarBotonesPujaRapida(subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000);
+                }
             } catch (eRefresh) {
                 console.warn("No se pudo refrescar automáticamente la subasta tras conflicto 409:", eRefresh);
             }
 
-            // Mostrar Banner Flotante no intrusivo y Toast
-            mostrarBannerConcurrencia(`⚡ <strong>Tu puja ha sido superada por otra transacción reciente.</strong> Los datos de la sala se han actualizado automáticamente.`);
-            mostrarToast('Tu puja ha sido superada por otra transacción reciente. Monto actualizado.', 'Conflicto de Concurrencia (409)', 'warning');
+            mostrarBannerConcurrencia(`⚡ <strong>${mensajeError}</strong> La sala de subastas se ha sincronizado con la última oferta registrada.`);
+            mostrarToast(`Conflicto de puja: ${mensajeError}`, 'Oferta Superada (409)', 'warning');
+        } else if (err.status === 400 || err.isBadRequest) {
+            mostrarToast(`Oferta rechazada: ${mensajeError}`, 'Regla de Negocio (400)', 'danger');
+            const feedbackBox = document.getElementById('bid-validation-feedback');
+            if (feedbackBox) {
+                feedbackBox.className = 'validation-feedback-box alert alert-danger py-2 small mb-0 d-flex justify-content-between align-items-center';
+                feedbackBox.innerHTML = `
+                    <div><i class="fa-solid fa-circle-exclamation me-1"></i> ${mensajeError}</div>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 extra-small" onclick="document.getElementById('form-realizar-puja').dispatchEvent(new Event('submit'))">
+                        <i class="fa-solid fa-rotate-right me-1"></i>Reintentar
+                    </button>
+                `;
+                feedbackBox.classList.remove('d-none');
+            }
+        } else if (err.status === 404 || err.isNotFound) {
+            mostrarToast(`Subasta no encontrada: ${mensajeError}`, 'No Encontrada (404)', 'danger');
+        } else if (err.status >= 500 || err.isServerError) {
+            mostrarToast(`Error interno del servidor (500): ${mensajeError}`, 'Error del Servidor', 'danger');
         } else {
-            mostrarToast(`No se pudo procesar la puja: ${err.message}`, 'Error de Operación', 'danger');
+            mostrarToast(`Error de comunicación: ${mensajeError}`, 'Error de Red', 'danger');
         }
     } finally {
         setBotonCargando('btn-realizar-puja', 'spinner-puja', 'text-puja', false);
@@ -1867,6 +1931,7 @@ async function actualizarBilleteraUI() {
         const saldoDisp = billetera.saldoDisponible ?? billetera.SaldoDisponible ?? 0;
         const saldoRet = billetera.saldoRetenido ?? billetera.SaldoRetenido ?? 0;
         const saldoTot = billetera.saldoTotal ?? billetera.SaldoTotal ?? 0;
+        saldoDisponibleUsuarioActual = saldoDisp;
 
         document.getElementById('wallet-usuario-info').textContent = `${usuarioActual.nombre} (${usuarioActual.email})`;
         
@@ -1898,13 +1963,13 @@ async function actualizarBilleteraUI() {
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td><span class="badge ${tipoInfo.badge}">${tipoInfo.nombre}</span></td>
-                <td class="fw-bold font-monospace ${tipoInfo.esPositivo ? 'text-success' : 'text-danger'}">
+                <td data-label="Tipo"><span class="badge ${tipoInfo.badge}">${tipoInfo.nombre}</span></td>
+                <td data-label="Monto" class="fw-bold font-monospace ${tipoInfo.esPositivo ? 'text-success' : 'text-danger'}">
                     ${tipoInfo.esPositivo ? '+' : '-'}$${m.monto.toLocaleString('es-AR')}
                 </td>
-                <td><small class="text-muted">${fechaStr}</small></td>
-                <td>${m.concepto || (m.subastaId ? `Subasta #${m.subastaId}` : 'Operación General')}</td>
-                <td><i class="fa-solid fa-circle-check text-success me-1"></i> Asentado</td>
+                <td data-label="Fecha"><small class="text-muted">${fechaStr}</small></td>
+                <td data-label="Concepto">${m.concepto || (m.subastaId ? `Subasta #${m.subastaId}` : 'Operación General')}</td>
+                <td data-label="Estado"><i class="fa-solid fa-circle-check text-success me-1"></i> Asentado</td>
             `;
             tbody.appendChild(tr);
         });
@@ -1954,7 +2019,7 @@ async function procesarCargaSaldoModal(event) {
         }
 
     } catch (err) {
-        mostrarToast(`Error al cargar saldo: ${err.message}`, 'Error', 'danger');
+        mostrarToast(`Error al cargar saldo: ${err.mensaje || err.message}`, 'Error', 'danger');
     } finally {
         setBotonCargando('btn-modal-cargar-saldo', 'spinner-cargar', 'text-cargar', false);
     }
@@ -2122,11 +2187,11 @@ async function cargarMisActividades() {
             col.className = 'col-lg-6 col-12 mb-3';
             col.innerHTML = `
                 <div class="card h-100 ${cardBorderClass} p-3 shadow-sm activity-card">
-                    <div class="d-flex gap-3">
-                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
-                        <div class="flex-grow-1 min-w-0">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
+                    <div class="d-flex gap-3 flex-wrap flex-sm-nowrap">
+                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 68px; height: 68px;" onerror="this.src='assets/images/watch.png'">
+                        <div class="flex-grow-1 min-w-0" style="min-width: 0; max-width: 100%;">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1 flex-wrap">
+                                <h6 class="fw-bold text-dark mb-0 text-truncate flex-grow-1" style="max-width: 200px;" title="${subTitulo}">${subTitulo}</h6>
                                 <div class="flex-shrink-0">${badgeLiderazgoHtml}</div>
                             </div>
                             <div class="extra-small text-muted mb-2">
@@ -2143,8 +2208,8 @@ async function cargarMisActividades() {
                                     <span class="fw-bold ${esLider ? 'text-success' : 'text-danger'}">$${pujaAbsolutaMax.toLocaleString('es-AR')}</span>
                                 </div>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
-                                <div>${escrowInfoHtml}</div>
+                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1 flex-wrap gap-2">
+                                <div class="text-break" style="max-width: 100%;">${escrowInfoHtml}</div>
                                 <button class="btn ${!haFinalizado && !esLider ? 'btn-warning text-dark fw-bold' : 'btn-outline-primary-custom'} btn-sm px-3" onclick="abrirSalaEnVivo(${subId})">
                                     ${!haFinalizado && !esLider ? '<i class="fa-solid fa-arrow-up me-1"></i>Pujar' : '<i class="fa-solid fa-gavel me-1"></i>Ver Sala'}
                                 </button>
@@ -2163,11 +2228,11 @@ async function cargarMisActividades() {
             colPub.className = 'col-lg-6 col-12 mb-3';
             colPub.innerHTML = `
                 <div class="card h-100 border p-3 shadow-sm activity-card">
-                    <div class="d-flex gap-3">
-                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
-                        <div class="flex-grow-1 min-w-0">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
+                    <div class="d-flex gap-3 flex-wrap flex-sm-nowrap">
+                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 68px; height: 68px;" onerror="this.src='assets/images/watch.png'">
+                        <div class="flex-grow-1 min-w-0" style="min-width: 0; max-width: 100%;">
+                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1 flex-wrap">
+                                <h6 class="fw-bold text-dark mb-0 text-truncate flex-grow-1" style="max-width: 200px;" title="${subTitulo}">${subTitulo}</h6>
                                 <span class="badge ${haFinalizado ? 'bg-secondary' : (subEstado === 'PROGRAMADA' ? 'bg-warning text-dark' : 'bg-primary-custom')}">${subEstado}</span>
                             </div>
                             <div class="extra-small text-muted mb-2">
@@ -2184,7 +2249,7 @@ async function cargarMisActividades() {
                                     <span class="fw-bold text-success">$${pujaAbsolutaMax.toLocaleString('es-AR')}</span>
                                 </div>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
+                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1 flex-wrap gap-2">
                                 <span class="extra-small text-muted">
                                     ${pujas.length > 0 ? `<i class="fa-solid fa-users me-1 text-primary-custom"></i>${pujas.length} oferta(s)` : '<i class="fa-regular fa-clock me-1"></i>Sin ofertas aún'}
                                 </span>
@@ -2408,6 +2473,20 @@ function configurarEventosUI() {
         });
     }
 
+    const inputPuja = document.getElementById('input-monto-puja');
+    if (inputPuja) {
+        inputPuja.addEventListener('input', () => {
+            inputPuja.dataset.modificadoManual = 'true';
+            validarPujaEnVivo();
+        });
+        inputPuja.addEventListener('focus', () => {
+            inputPuja.dataset.modificadoManual = 'true';
+        });
+        inputPuja.addEventListener('change', () => {
+            validarPujaEnVivo();
+        });
+    }
+
     const tabElList = document.querySelectorAll('button[data-bs-toggle="pill"]');
     tabElList.forEach(tabEl => {
         tabEl.addEventListener('shown.bs.tab', async (event) => {
@@ -2435,6 +2514,131 @@ function configurarEventosUI() {
         dropdownUserContainer.addEventListener('show.bs.dropdown', async () => {
             await sincronizarSaldosDropdown();
         });
+    }
+}
+
+/* ==========================================================================
+   POLLING EN VIVO CADA 2.5s & CONTROL DE VISIBILIDAD (F13)
+   ========================================================================== */
+
+function iniciarPollingEnVivo() {
+    if (timerPollingInterval) clearInterval(timerPollingInterval);
+    timerPollingInterval = setInterval(ejecutarCicloPolling, 2500);
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        ejecutarCicloPolling();
+    }
+});
+
+async function ejecutarCicloPolling() {
+    if (document.visibilityState === 'hidden') return; // Pausado cuando pestaña oculta
+
+    cicloPollingCount++;
+
+    try {
+        // 1. Polling de la sala en vivo abierta (pujas, líder, FechaFin, versión, estado)
+        if (subastaSeleccionadaSala && subastaSeleccionadaSala.id) {
+            const idActual = subastaSeleccionadaSala.id;
+            try {
+                const subFresca = await fetchObtenerSubastaPorId(idActual);
+                if (subFresca && subastaSeleccionadaSala && subastaSeleccionadaSala.id === idActual) {
+                    const fechaFinAnteriorMs = subastaSeleccionadaSala.fechaFin ? parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime() : 0;
+                    const fechaFinNuevaIso = subFresca.fechaFin ?? subFresca.FechaFin;
+                    const fechaFinNuevaMs = fechaFinNuevaIso ? parseUtcDate(fechaFinNuevaIso).getTime() : 0;
+
+                    // Si hubo extensión anti-sniping (+120s)
+                    if (fechaFinNuevaMs > fechaFinAnteriorMs && fechaFinAnteriorMs > 0) {
+                        subastaSeleccionadaSala.fechaFin = fechaFinNuevaIso;
+                        mostrarToast('⚡ <strong>¡Tiempo extendido (+120s)!</strong> Se activó la regla anti-sniping por una oferta en zona crítica.', 'Subasta Extendida', 'warning');
+                    } else if (fechaFinNuevaIso) {
+                        subastaSeleccionadaSala.fechaFin = fechaFinNuevaIso;
+                    }
+
+                    // Detectar si el usuario era líder y fue superado (Outbid)
+                    const pujasViejas = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
+                    const pujasNuevas = subFresca.pujas || subFresca.Pujas || [];
+                    
+                    const eraLider = esUsuarioLiderEnPujas(pujasViejas, usuarioActual?.id);
+                    const esLiderAhora = esUsuarioLiderEnPujas(pujasNuevas, usuarioActual?.id);
+
+                    if (eraLider && !esLiderAhora && pujasNuevas.length > pujasViejas.length) {
+                        mostrarToast('🚨 <strong>¡Tu oferta ha sido superada!</strong> Otro postor realizó una puja mayor. Incrementa tu oferta para recuperar el liderazgo.', '¡Oferta Superada!', 'danger');
+                    }
+
+                    subastaSeleccionadaSala = { ...subFresca };
+                    if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
+
+                    // Actualizar UI de la sala
+                    actualizarMonitorPujasSala();
+                    actualizarRelojSala();
+
+                    // NO PISAR el valor si el usuario tiene el foco o está escribiendo en el input
+                    const inputPuja = document.getElementById('input-monto-puja');
+                    const estaEditando = inputPuja && (document.activeElement === inputPuja || inputPuja.dataset.modificadoManual === 'true');
+
+                    if (!estaEditando && inputPuja) {
+                        const pujaActual = obtenerPujaMaxima(subastaSeleccionadaSala);
+                        const incMin = subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000;
+                        inputPuja.value = pujaActual + incMin;
+                    }
+
+                    validarPujaEnVivo();
+                }
+            } catch (errSala) {}
+        }
+
+        // 2. Polling del saldo del usuario actual
+        if (usuarioActual && usuarioActual.id) {
+            try {
+                const b = await fetchObtenerBilletera(usuarioActual.id);
+                if (b) {
+                    actualizarSaldosEnNavbarYDropdown(b);
+                }
+            } catch (_) {}
+        }
+
+        // 3. Refrescar catálogo cada 2 ciclos (~5s)
+        if (cicloPollingCount % 2 === 0) {
+            try {
+                const subs = await fetchObtenerSubastas();
+                if (subs && Array.isArray(subs)) {
+                    subastasCache = subs;
+                    actualizarTarjetasCatalogo();
+                }
+            } catch (_) {}
+        }
+
+    } catch (e) {}
+}
+
+function esUsuarioLiderEnPujas(pujas, uid) {
+    if (!pujas || pujas.length === 0 || !uid) return false;
+    const ordenadas = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
+    return (ordenadas[0].usuarioId ?? ordenadas[0].UsuarioId) === uid;
+}
+
+function actualizarSaldosEnNavbarYDropdown(billetera) {
+    const disp = billetera.saldoDisponible ?? billetera.SaldoDisponible ?? 0;
+    saldoDisponibleUsuarioActual = disp;
+    const navSaldo = document.getElementById('nav-user-saldo');
+    if (navSaldo) {
+        navSaldo.textContent = `$${disp.toLocaleString('es-AR')}`;
+    }
+    const saldoDispElem = document.getElementById('wallet-saldo-disponible');
+    if (saldoDispElem) {
+        saldoDispElem.textContent = `$${disp.toLocaleString('es-AR')}`;
+    }
+    const saldoTotElem = document.getElementById('wallet-saldo-total');
+    if (saldoTotElem) {
+        const tot = billetera.saldoTotal ?? billetera.SaldoTotal ?? 0;
+        saldoTotElem.textContent = `$${tot.toLocaleString('es-AR')}`;
+    }
+    const saldoRetElem = document.getElementById('wallet-saldo-retenido');
+    if (saldoRetElem) {
+        const ret = billetera.saldoRetenido ?? billetera.SaldoRetenido ?? 0;
+        saldoRetElem.textContent = `$${ret.toLocaleString('es-AR')}`;
     }
 }
 
@@ -2750,6 +2954,37 @@ function togglePwVisibilityCredenciales() {
 }
 
 /* ==========================================================================
+   HELPER DE VERIFICACIÓN AUTOMATIZADA DE RÚBRICA EN NAVEGADOR
+   ========================================================================== */
+
+window.__verificarRubrica = async function() {
+    const tabs = [
+        { id: 'tab-catalogo', nombre: 'Catálogo' },
+        { id: 'tab-publicar', nombre: 'Publicar' },
+        { id: 'tab-sala', nombre: 'Sala en Vivo' },
+        { id: 'tab-billetera', nombre: 'Billetera' },
+        { id: 'tab-actividades', nombre: 'Mis Actividades' }
+    ];
+    const reporte = [];
+    for (const t of tabs) {
+        const btn = document.getElementById(t.id);
+        if (btn) btn.click();
+        await new Promise(r => setTimeout(r, 250));
+        const sWidth = document.documentElement.scrollWidth;
+        const iWidth = window.innerWidth;
+        reporte.push({
+            modulo: t.nombre,
+            scrollWidth: sWidth,
+            innerWidth: iWidth,
+            cumple: sWidth <= iWidth
+        });
+    }
+    console.table(reporte);
+    return reporte;
+};
+
+/* ==========================================================================
    FIN DEL MÓDULO APP.JS
    ========================================================================== */
+
 

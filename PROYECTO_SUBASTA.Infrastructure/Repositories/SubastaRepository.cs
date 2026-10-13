@@ -1,9 +1,12 @@
-using Microsoft.EntityFrameworkCore;
-using PROYECTO_SUBASTA.Domain.Entities;
-using PROYECTO_SUBASTA.Application.Repositories;
-using PROYECTO_SUBASTA.Infrastructure.Data;
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using PROYECTO_SUBASTA.Application.Repositories;
+using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Infrastructure.Data;
 
 namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 {
@@ -15,16 +18,95 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 
         public async Task<IEnumerable<Subasta>> ObtenerActivasAsync()
         {
-            // Consultamos las subastas activas incluyendo de forma ansiosa (Eager Loading) sus categorías y pujas asociadas.
             return await _context.Subastas
                 .Include(s => s.Categoria)
                 .Include(s => s.Pujas)
+                .Where(s => s.Estado == "ACTIVA")
                 .ToListAsync();
+        }
+
+        public async Task<(IEnumerable<Subasta> Items, int TotalCount)> ObtenerFiltradasAsync(
+            int? categoriaId,
+            string? estado,
+            decimal? precioMin,
+            decimal? precioMax,
+            string? ordenarPor,
+            string? orden,
+            int pageNumber,
+            int pageSize,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _context.Subastas
+                .AsNoTracking()
+                .Include(s => s.Categoria)
+                .Include(s => s.Pujas)
+                .AsQueryable();
+
+            if (categoriaId.HasValue)
+            {
+                query = query.Where(s => s.CategoriaId == categoriaId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(estado))
+            {
+                var est = estado.Trim().ToUpperInvariant();
+                query = query.Where(s => s.Estado == est);
+            }
+
+            if (precioMin.HasValue)
+            {
+                query = query.Where(s => s.PrecioBase >= precioMin.Value);
+            }
+
+            if (precioMax.HasValue)
+            {
+                query = query.Where(s => s.PrecioBase <= precioMax.Value);
+            }
+
+            var ordenAsc = string.Equals(orden?.Trim(), "asc", StringComparison.OrdinalIgnoreCase);
+            var sortKey = (ordenarPor ?? string.Empty).Trim().ToLowerInvariant();
+
+            query = sortKey switch
+            {
+                "precio" => ordenAsc ? query.OrderBy(s => s.PrecioBase) : query.OrderByDescending(s => s.PrecioBase),
+                "titulo" => ordenAsc ? query.OrderBy(s => s.Titulo) : query.OrderByDescending(s => s.Titulo),
+                "pujas" => ordenAsc ? query.OrderBy(s => s.Pujas.Count) : query.OrderByDescending(s => s.Pujas.Count),
+                "cierre" => ordenAsc ? query.OrderBy(s => s.FechaFin) : query.OrderByDescending(s => s.FechaFin),
+                _ => ordenAsc ? query.OrderBy(s => s.FechaFin) : query.OrderBy(s => s.FechaFin)
+            };
+
+            var totalCount = await query.CountAsync(cancellationToken);
+
+            var items = await query
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            return (items, totalCount);
+        }
+
+        public async Task<IEnumerable<Subasta>> ObtenerPorUsuarioOfertanteAsync(int usuarioId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Subastas
+                .AsNoTracking()
+                .Include(s => s.Categoria)
+                .Include(s => s.Pujas)
+                .Where(s => s.Pujas.Any(p => p.UsuarioId == usuarioId))
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<IEnumerable<Subasta>> ObtenerPorVendedorAsync(int vendedorId, CancellationToken cancellationToken = default)
+        {
+            return await _context.Subastas
+                .AsNoTracking()
+                .Include(s => s.Categoria)
+                .Include(s => s.Pujas)
+                .Where(s => s.VendedorId == vendedorId)
+                .ToListAsync(cancellationToken);
         }
 
         public async Task<Subasta?> ObtenerPorIdAsync(int id)
         {
-            // Recuperamos una subasta específica aplicando cargas relacionadas de categoría y pujas.
             return await _context.Subastas
                 .Include(s => s.Categoria)
                 .Include(s => s.Pujas)
@@ -46,17 +128,31 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
         {
             await SaveChangesAsync();
         }
+
         public async Task ActualizarConConcurrenciaAsync(Subasta subasta, int versionCliente)
         {
-            // 1. Establecemos la versión que mandó el cliente como el valor original que EF espera encontrar
-            _context.Entry(subasta).Property(s => s.Version).OriginalValue = (uint)versionCliente;
+            if (versionCliente > 0)
+            {
+                _context.Entry(subasta).Property(s => s.Version).OriginalValue = (uint)versionCliente;
+            }
 
-            // 2. Incrementamos explícitamente el valor actual en memoria
-            subasta.Version = (uint)(versionCliente + 1);
-
-            // 3. Marcamos la entidad como modificada y guardamos
             _context.Entry(subasta).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
+            await Task.CompletedTask;
+        }
+
+        public async Task<IEnumerable<int>> ObtenerVencidasParaCerrarIdsAsync(DateTime ahoraUtc)
+        {
+            return await _context.Subastas
+                .Where(s => (s.Estado == "ACTIVA" || s.Estado == "PROGRAMADA") && s.FechaFin <= ahoraUtc)
+                .Select(s => s.Id)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<Subasta>> ObtenerProgramadasParaActivarAsync(DateTime ahoraUtc)
+        {
+            return await _context.Subastas
+                .Where(s => s.Estado == "PROGRAMADA" && s.FechaInicio <= ahoraUtc && s.FechaFin > ahoraUtc)
+                .ToListAsync();
         }
     }
 }

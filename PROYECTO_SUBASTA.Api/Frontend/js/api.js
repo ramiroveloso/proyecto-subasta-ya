@@ -296,16 +296,20 @@ class HttpInterceptorClient {
             }
 
             if (!response.ok) {
+                const mensajeServidor = (data && (data.mensaje || data.Mensaje || data.message || data.title))
+                    ? (data.mensaje || data.Mensaje || data.message || data.title)
+                    : (typeof data === 'string' && data ? data : `Error HTTP ${response.status}: ${response.statusText}`);
+
                 const errorObj = {
                     status: response.status,
                     statusText: response.statusText,
-                    message: (data && (data.mensaje || data.message || data.title))
-                        ? (data.mensaje || data.message || data.title)
-                        : (typeof data === 'string' && data ? data : `Error HTTP ${response.status}: ${response.statusText}`),
+                    message: mensajeServidor,
+                    mensaje: mensajeServidor,
                     details: data,
                     isConflict: response.status === 409,
                     isBadRequest: response.status === 400 || response.status === 422,
-                    isNotFound: response.status === 404
+                    isNotFound: response.status === 404,
+                    isServerError: response.status >= 500
                 };
                 throw errorObj;
             }
@@ -340,8 +344,19 @@ class HttpInterceptorClient {
                 interceptedError = {
                     status: 408,
                     message: 'Tiempo de espera agotado (Timeout) al comunicar con el servidor.',
-                    isTimeout: true
+                    mensaje: 'Tiempo de espera agotado (Timeout) al comunicar con el servidor.',
+                    isTimeout: true,
+                    isNetworkError: true
                 };
+            } else if (interceptedError instanceof TypeError || (interceptedError.message && interceptedError.message.includes('fetch'))) {
+                interceptedError = {
+                    status: 0,
+                    message: 'Error de conexión de red: no se pudo contactar al servidor.',
+                    mensaje: 'Error de conexión de red: no se pudo contactar al servidor.',
+                    isNetworkError: true
+                };
+            } else if (!interceptedError.mensaje) {
+                interceptedError.mensaje = interceptedError.message || 'Error inesperado al comunicarse con el servidor.';
             }
 
             throw interceptedError;
@@ -436,16 +451,8 @@ async function fetchCrearSubasta(subastaData) {
             body: JSON.stringify(subastaData)
         });
     } catch (e) {
-        if (e.status === 400 || e.status === 422) throw e;
-        
-        const nuevaSubasta = {
-            id: MOCK_SUBASTAS.length + 1,
-            ...subastaData,
-            version: 1,
-            pujas: []
-        };
-        MOCK_SUBASTAS.push(nuevaSubasta);
-        return nuevaSubasta;
+        // Toda falla del backend (400, 422, 500, etc.) o error de red se propaga inmediatamente
+        throw e;
     }
 }
 
@@ -471,30 +478,8 @@ async function fetchRegistrarPuja(subastaId, usuarioId, monto, version) {
         }
         return res;
     } catch (e) {
-        if (e.status === 400 || e.status === 409 || e.status === 422) throw e;
-
-        // Modo Simulación Local: registrar y asentar en MOCK_SUBASTAS
-        const sub = MOCK_SUBASTAS.find(s => s.id == subastaId);
-        if (sub) {
-            const anonHandle = `Postor #${(usuarioId * 33 + 100).toString(16).toUpperCase()}`;
-            const nuevaPuja = {
-                id: Date.now(),
-                subastaId: sub.id,
-                usuarioId: usuarioId,
-                monto: monto,
-                fechaCreacion: new Date().toISOString(),
-                postorAnonimo: anonHandle
-            };
-            if (!sub.pujas) sub.pujas = [];
-            sub.pujas.push(nuevaPuja);
-            sub.version = (sub.version || 1) + 1;
-            return {
-                mensaje: 'Puja registrada con éxito y saldo retenido en Escrow.',
-                puja: nuevaPuja,
-                version: sub.version
-            };
-        }
-        return { mensaje: 'Ok' };
+        // Toda falla del backend (400, 404, 409, 500, etc.) o error de red se propaga inmediatamente
+        throw e;
     }
 }
 
@@ -513,18 +498,15 @@ async function fetchCrearUsuario(nombre, email) {
             body: JSON.stringify({ nombre, email })
         });
     } catch (e) {
-        if (e.status === 400) throw e;
-        const nuevoId = Object.keys(MOCK_BILLETERAS).length + 1;
-        MOCK_BILLETERAS[nuevoId] = {
-            id: nuevoId,
-            usuarioId: nuevoId,
-            saldoTotal: 0,
-            saldoRetenido: 0,
-            saldoDisponible: 0,
-            version: 1,
-            movimientos: []
-        };
-        return { mensaje: 'Usuario y billetera creados correctamente (Simulación)', usuarioId: nuevoId };
+        throw e;
+    }
+}
+
+async function fetchObtenerActividades(usuarioId) {
+    try {
+        return await apiFetch(`/Usuarios/${usuarioId}/actividades`);
+    } catch (e) {
+        throw e;
     }
 }
 
@@ -564,20 +546,7 @@ async function fetchCargarSaldo(usuarioId, monto) {
             body: JSON.stringify({ usuarioId, monto, tipo: 'DEPOSITO' })
         });
     } catch (e) {
-        if (e.status === 400) throw e;
-        const b = await fetchObtenerBilletera(usuarioId);
-        b.saldoTotal += monto;
-        b.saldoDisponible += monto;
-        b.movimientos.unshift({
-            id: Date.now(),
-            billeteraId: b.id,
-            tipo: 0, // DEPOSITO
-            monto: monto,
-            fecha: new Date().toISOString(),
-            subastaId: null,
-            concepto: `Carga Libre de Fondos Tester (Ramiro Veloso)`
-        });
-        return { mensaje: `¡Se han acreditado $${monto.toLocaleString()} libremente a la cuenta!` };
+        throw e;
     }
 }
 

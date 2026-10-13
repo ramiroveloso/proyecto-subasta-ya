@@ -27,6 +27,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         // Relaciones de navegación
         public Categoria? Categoria { get; set; }
         public Usuario? Vendedor { get; set; }
+        public Usuario? Ganador { get; set; }
         public ICollection<Puja> Pujas { get; set; } = new List<Puja>();
 
         // ========================================================================
@@ -97,9 +98,9 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         /// <summary>
         /// Evalúa la regla Anti-Sniping paramétrica.
-        /// Si la puja entra en el umbral previo al cierre (por defecto 60s), extiende la FechaFin por la cantidad de segundos configurada (por defecto 120s).
+        /// Si la puja entra en el umbral previo al cierre (umbralSegundos), extiende la FechaFin por la cantidad de segundos configurada (extensionSegundos).
         /// </summary>
-        public bool EvaluarAntiSniping(DateTime ahoraUtc, int umbralSegundos = 60, int extensionSegundos = 120)
+        public bool EvaluarAntiSniping(DateTime ahoraUtc, int umbralSegundos, int extensionSegundos)
         {
             var tiempoRestante = FechaFin - ahoraUtc;
             if (tiempoRestante > TimeSpan.Zero && tiempoRestante.TotalSeconds <= umbralSegundos)
@@ -112,15 +113,15 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         /// <summary>
         /// Valida y registra una nueva puja en la entidad de forma atómica.
-        /// Incrementa la versión de concurrencia y aplica la extensión anti-sniping si corresponde.
+        /// Incrementa la versión de concurrencia y aplica la extensión anti-sniping si corresponde según los parámetros provistos.
         /// </summary>
         public (Puja NuevaPuja, bool AntiSnipingActivado) RegistrarPuja(
             int usuarioId,
             decimal monto,
             DateTime ahoraUtc,
-            decimal? saldoDisponiblePostor = null,
-            int antiSnipingUmbralSegundos = 60,
-            int antiSnipingExtensionSegundos = 120)
+            decimal? saldoDisponiblePostor,
+            int antiSnipingUmbralSegundos,
+            int antiSnipingExtensionSegundos)
         {
             ValidarPuedePujar(usuarioId, monto, ahoraUtc, saldoDisponiblePostor);
 
@@ -146,8 +147,45 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         }
 
         /// <summary>
-        /// Concluye la subasta con adjudicación y ganador.
+        /// Activa una subasta en estado PROGRAMADA al llegar su FechaInicio.
         /// </summary>
+        public void Activar(DateTime ahoraUtc)
+        {
+            if (Estado != "PROGRAMADA")
+                throw new DominioException($"Solo se pueden activar subastas en estado 'PROGRAMADA'. Estado actual: '{Estado}'.");
+
+            if (ahoraUtc < FechaInicio)
+                throw new DominioException("No se puede activar la subasta antes de su fecha de inicio.");
+
+            Estado = "ACTIVA";
+            Version++;
+        }
+
+        /// <summary>
+        /// Determina si la subasta califica para el proceso de cierre y liquidación.
+        /// </summary>
+        public bool PuedeCerrarse(DateTime ahoraUtc)
+        {
+            return (Estado == "ACTIVA" || Estado == "PROGRAMADA") && ahoraUtc >= FechaFin;
+        }
+
+        /// <summary>
+        /// Concluye la subasta con adjudicación y ganador al vencer su período.
+        /// </summary>
+        public void Finalizar(int ganadorId, decimal precioFinal, DateTime ahoraUtc)
+        {
+            if (Estado != "ACTIVA" && Estado != "PROGRAMADA")
+                throw new DominioException($"No se puede finalizar una subasta en estado '{Estado}'.");
+
+            if (ahoraUtc < FechaFin)
+                throw new DominioException("No se puede finalizar la subasta antes de su fecha de expiración.");
+
+            Estado = "FINALIZADA";
+            GanadorId = ganadorId;
+            PrecioFinal = precioFinal;
+            Version++;
+        }
+
         public void Finalizar(int ganadorId, decimal precioFinal)
         {
             if (Estado != "ACTIVA" && Estado != "PROGRAMADA")
@@ -162,6 +200,20 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         /// <summary>
         /// Declara desierta la subasta al vencer sin ofertas.
         /// </summary>
+        public void DeclararDesierta(DateTime ahoraUtc)
+        {
+            if (Estado != "ACTIVA" && Estado != "PROGRAMADA")
+                throw new DominioException($"No se puede declarar desierta una subasta en estado '{Estado}'.");
+
+            if (ahoraUtc < FechaFin)
+                throw new DominioException("No se puede declarar desierta la subasta antes de su fecha de expiración.");
+
+            Estado = "DESIERTA";
+            GanadorId = null;
+            PrecioFinal = null;
+            Version++;
+        }
+
         public void DeclararDesierta()
         {
             if (Estado != "ACTIVA" && Estado != "PROGRAMADA")

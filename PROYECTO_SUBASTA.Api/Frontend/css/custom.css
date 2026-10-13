@@ -190,28 +190,38 @@ body {
 
 .badge-status {
     position: absolute;
-    top: 12px;
-    right: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.4em 0.8em;
+    bottom: 10px;
+    right: 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.35em 0.75em;
     border-radius: 50rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    max-width: calc(65% - 10px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 2;
 }
 
 .badge-categoria {
     position: absolute;
-    top: 12px;
-    left: 12px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    background: rgba(0, 0, 0, 0.65);
+    top: 10px;
+    left: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.75);
     color: #fff;
     backdrop-filter: blur(4px);
     padding: 0.3em 0.7em;
     border-radius: 6px;
+    max-width: calc(65% - 10px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 2;
 }
 
 .content-card {
@@ -222,22 +232,33 @@ body {
 }
 
 /* --- Wallet Balance Cards (Model Metrics) --- */
+.wallet-card-total, .wallet-card-available, .wallet-card-retained {
+    height: 100%;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border-radius: 14px;
+    color: white;
+}
+
 .wallet-card-total {
     background: linear-gradient(135deg, #581845 0%, #3e1030 100%);
-    color: white;
-    border-radius: 14px;
 }
 
 .wallet-card-available {
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
-    color: white;
-    border-radius: 14px;
 }
 
 .wallet-card-retained {
     background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
-    color: white;
-    border-radius: 14px;
+}
+
+.wallet-card-total h2, .wallet-card-available h2, .wallet-card-retained h2 {
+    font-size: clamp(1.2rem, 2.2vw, 1.85rem) !important;
+    word-break: normal;
+    white-space: nowrap;
+    letter-spacing: -0.5px;
 }
 
 /* --- Live Auction Room Styling & Regla Anti-Sniping --- */
@@ -1178,6 +1199,234 @@ body {
 .card-stat-metric:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN RULES: F09 (375px) & F10 (768px)
+   ========================================================================== */
+
+/* Reglas Globales Anti-Overflow */
+html, body {
+    max-width: 100%;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* Offcanvas oculto sin desbordar el viewport */
+.offcanvas:not(.show) {
+    display: none !important;
+}
+.devtools-offcanvas {
+    max-width: 100vw;
+}
+
+/* Tabla de Billetera Responsiva (375px y 768px): formato tarjeta sin desborde */
+@media (max-width: 991.98px) {
+    .wallet-ledger-table thead {
+        display: none !important;
+    }
+    .wallet-ledger-table,
+    .wallet-ledger-table tbody,
+    .wallet-ledger-table tr,
+    .wallet-ledger-table td {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .wallet-ledger-table tr {
+        margin-bottom: 0.75rem;
+        border: 1px solid #e9ecef !important;
+        border-radius: 0.5rem;
+        padding: 0.6rem 0.8rem;
+        background: #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    }
+    .wallet-ledger-table td {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 0.35rem 0 !important;
+        border-bottom: 1px dashed #f1f3f5 !important;
+        font-size: 0.85rem;
+    }
+    .wallet-ledger-table td:last-child {
+        border-bottom: none !important;
+    }
+    .wallet-ledger-table td::before {
+        font-weight: 600;
+        color: #6c757d;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        content: attr(data-label);
+    }
+}
+
+
+/* --- F10: TABLET (768px - 991px) --- */
+@media (min-width: 768px) and (max-width: 991.98px) {
+    /* Módulo Publicación: Evitar que preview y campos de fecha se recorten */
+    #form-crear-subasta > .row > .col-md-8,
+    #form-crear-subasta > .row > .col-md-4 {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+
+    #form-crear-subasta .sticky-top {
+        position: static !important;
+        margin-top: 1.5rem;
+    }
+
+    #crear-preview-precio {
+        white-space: nowrap !important;
+    }
+
+    /* Módulo Billetera a 768px: Tarjetas de alturas iguales y métricas alineadas */
+    #content-billetera .col-md-4 {
+        display: flex;
+    }
+
+    .wallet-card-total, 
+    .wallet-card-retained, 
+    .wallet-card-available {
+        width: 100%;
+        min-height: 155px;
+        padding: 1.25rem !important;
+    }
+
+    .wallet-card-total h2, 
+    .wallet-card-retained h2, 
+    .wallet-card-available h2 {
+        font-size: 1.45rem !important;
+        white-space: nowrap;
+    }
+
+    /* Tarjetas métricas de Mis Actividades a 768px */
+    .card-stat-metric {
+        padding: 1.25rem !important;
+        min-height: 155px;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+    }
+
+    .card-stat-metric .extra-small.text-uppercase {
+        min-height: 2.4em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .stat-metric-num {
+        font-size: 2.4rem !important;
+    }
+}
+
+/* --- F09: MÓVIL (375px y pantallas < 576px) --- */
+@media (max-width: 576px) {
+    /* Evitar desborde del layout principal */
+    .container-fluid {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .content-card {
+        padding: 1rem !important;
+        border-radius: 12px;
+    }
+
+    .sidebar-card {
+        padding: 0.75rem !important;
+    }
+
+    .stat-metric-num {
+        font-size: 2rem !important;
+    }
+
+    .card-stat-metric {
+        padding: 1rem !important;
+    }
+
+    /* Módulo Mis Actividades: Corregir desborde horizontal de tarjetas */
+    .activity-card {
+        padding: 0.85rem !important;
+        overflow: hidden;
+    }
+
+    .activity-card .d-flex.gap-3 {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 0.75rem !important;
+    }
+
+    .activity-card img {
+        width: 60px !important;
+        height: 60px !important;
+    }
+
+    .activity-card .flex-grow-1 {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .activity-card .d-flex.justify-content-between.align-items-center.pt-1 {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.6rem !important;
+    }
+
+    .activity-card .d-flex.justify-content-between.align-items-center.pt-1 button {
+        width: 100% !important;
+    }
+
+    /* Módulo Catálogo en móvil */
+    .category-pills-wrapper {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    /* Módulo Sala en Vivo en móvil */
+    .live-center-controls {
+        padding: 1rem !important;
+    }
+
+    #quick-bids-container {
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    #quick-bids-container .btn {
+        flex: 1 1 auto;
+        min-width: 80px;
+    }
+
+    .timer-digits {
+        font-size: 1.6rem !important;
+        letter-spacing: 1px;
+    }
+
+    /* Módulo Billetera en móvil */
+    .wallet-card-total, 
+    .wallet-card-retained, 
+    .wallet-card-available {
+        min-height: 130px;
+        padding: 1rem !important;
+    }
+
+    .wallet-card-total h2, 
+    .wallet-card-retained h2, 
+    .wallet-card-available h2 {
+        font-size: 1.4rem !important;
+    }
+
+    .table-responsive {
+        max-width: 100%;
+        overflow-x: auto;
+    }
 }
 
 

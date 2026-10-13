@@ -83,6 +83,11 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
             }
         }
 
+        public void DescartarCambiosPendientes()
+        {
+            _context.ChangeTracker.Clear();
+        }
+
         public async ValueTask DisposeAsync()
         {
             if (_currentTransaction != null)
