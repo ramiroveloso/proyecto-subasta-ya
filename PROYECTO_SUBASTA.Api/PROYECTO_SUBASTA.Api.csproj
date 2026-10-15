@@ -5,7 +5,8 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<RootNamespace>PROYECTO_SUBASTA.Api</RootNamespace>
-	</PropertyGroup>
+	  <UserSecretsId>216d51b7-6933-4445-9929-4b60fa4bbd37</UserSecretsId>
+  </PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.30" />

@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using PROYECTO_SUBASTA.Application.Validators;
 
 namespace PROYECTO_SUBASTA.Application.DTOs
 {
@@ -23,42 +24,12 @@ namespace PROYECTO_SUBASTA.Application.DTOs
     /// </summary>
     public class CargarSaldoDto
     {
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un usuario válido.")]
-        public int UsuarioId { get; set; }
-
-        [Range(0.01, double.MaxValue, ErrorMessage = "El monto a cargar debe ser mayor a cero.")]
-        public decimal Monto { get; set; }
-    }
-
-    /// <summary>
-    /// DTO de entrada para operaciones de garantía en Escrow (Retención / Liberación).
-    /// </summary>
-    public class OperacionFondosDto
-    {
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un usuario válido.")]
-        public int UsuarioId { get; set; }
-
-        [Range(0.01, double.MaxValue, ErrorMessage = "El monto debe ser superior a cero.")]
-        public decimal Monto { get; set; }
-
-        [Range(1, int.MaxValue, ErrorMessage = "Debe vincular un ID de subasta válido.")]
-        public int SubastaId { get; set; }
-    }
-
-    /// <summary>
-    /// DTO para el registro unificado de movimientos en billeteras (Depósito/Carga, Retención en Escrow, Liberación).
-    /// </summary>
-    public class RegistrarMovimientoDto
-    {
         public int? UsuarioId { get; set; }
 
-        [Range(0.01, double.MaxValue, ErrorMessage = "El monto debe ser superior a cero.")]
+        [MonedaPrecision(ErrorMessage = "El monto a cargar debe ser mayor a cero, no superar 100.000.000 y contener como máximo 2 decimales.")]
         public decimal Monto { get; set; }
-
-        public string? Tipo { get; set; } // "DEPOSITO" / "CARGA", "RETENCION", "LIBERACION"
-
-        public int? SubastaId { get; set; }
     }
+
 
     /// <summary>
     /// DTO de lectura para cada asiento del libro diario contable (TransactionLedger).

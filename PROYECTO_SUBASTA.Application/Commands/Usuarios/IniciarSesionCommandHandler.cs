@@ -11,11 +11,13 @@ namespace PROYECTO_SUBASTA.Application.Commands.Usuarios
 {
     public class IniciarSesionCommandHandler
     {
-        private readonly IRepository<Usuario> _usuarioRepository;
+        private readonly IUsuarioRepository _usuarioRepository;
+        private readonly Services.IPasswordHasher _passwordHasher;
 
-        public IniciarSesionCommandHandler(IRepository<Usuario> usuarioRepository)
+        public IniciarSesionCommandHandler(IUsuarioRepository usuarioRepository, Services.IPasswordHasher passwordHasher)
         {
             _usuarioRepository = usuarioRepository ?? throw new ArgumentNullException(nameof(usuarioRepository));
+            _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(passwordHasher));
         }
 
         public async Task<IniciarSesionResponseDto> HandleAsync(IniciarSesionCommand command, CancellationToken cancellationToken = default)
@@ -26,15 +28,16 @@ namespace PROYECTO_SUBASTA.Application.Commands.Usuarios
             }
 
             var input = command.Usuario.Trim();
-            var usuarios = await _usuarioRepository.GetAllAsync();
-
-            var usuario = usuarios.FirstOrDefault(u =>
-                string.Equals(u.Email, input, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(u.Nombre, input, StringComparison.OrdinalIgnoreCase));
+            var usuario = await _usuarioRepository.ObtenerPorEmailONombreAsync(input, cancellationToken);
 
             if (usuario == null)
             {
-                throw new UnauthorizedAccessException("Credenciales incorrectas: usuario o correo no registrado.");
+                throw new UnauthorizedAccessException("Credenciales incorrectas.");
+            }
+
+            if (string.IsNullOrEmpty(command.Password) || !_passwordHasher.Verificar(command.Password, usuario.PasswordHash))
+            {
+                throw new UnauthorizedAccessException("Credenciales incorrectas.");
             }
 
             return new IniciarSesionResponseDto

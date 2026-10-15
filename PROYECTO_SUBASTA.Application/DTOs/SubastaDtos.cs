@@ -1,28 +1,29 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using PROYECTO_SUBASTA.Application.Validators;
 
 namespace PROYECTO_SUBASTA.Application.DTOs
 {
     /// <summary>
-    /// DTO para la creaci�n y parametrizaci�n de una nueva subasta.
+    /// DTO para la creación y parametrización de una nueva subasta.
     /// </summary>
     public class CrearSubastaDto
     {
-        [Required(ErrorMessage = "El t�tulo de la subasta es obligatorio.")]
-        [StringLength(150, MinimumLength = 3, ErrorMessage = "El t�tulo debe tener entre 3 y 150 caracteres.")]
+        [Required(ErrorMessage = "El título de la subasta es obligatorio.")]
+        [StringLength(150, MinimumLength = 3, ErrorMessage = "El título debe tener entre 3 y 150 caracteres.")]
         public string Titulo { get; set; } = string.Empty;
 
-        [StringLength(1000, ErrorMessage = "La descripci�n no puede superar los 1000 caracteres.")]
+        [StringLength(1000, ErrorMessage = "La descripción no puede superar los 1000 caracteres.")]
         public string Descripcion { get; set; } = string.Empty;
 
-        [Url(ErrorMessage = "La URL de la imagen debe ser una direcci�n web v�lida.")]
+        [Url(ErrorMessage = "La URL de la imagen debe ser una dirección web válida.")]
         public string UrlImagen { get; set; } = string.Empty;
 
-        [Range(0.01, double.MaxValue, ErrorMessage = "El precio base debe ser mayor a cero.")]
+        [MonedaPrecision(ErrorMessage = "El precio base debe ser mayor a cero, no superar 100.000.000 y contener como máximo 2 decimales.")]
         public decimal PrecioBase { get; set; }
 
-        [Range(0.01, double.MaxValue, ErrorMessage = "El incremento m�nimo debe ser mayor a cero.")]
+        [MonedaPrecision(ErrorMessage = "El incremento mínimo debe ser mayor a cero, no superar 100.000.000 y contener como máximo 2 decimales.")]
         public decimal IncrementoMinimo { get; set; }
 
         [Required(ErrorMessage = "La fecha de inicio es obligatoria.")]
@@ -31,15 +32,15 @@ namespace PROYECTO_SUBASTA.Application.DTOs
         [Required(ErrorMessage = "La fecha de fin es obligatoria.")]
         public DateTime FechaFin { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar una categor�a v�lida.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar una categoría válida.")]
         public int CategoriaId { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un vendedor v�lido.")]
+        [Range(1, int.MaxValue, ErrorMessage = "Debe especificar un vendedor válido.")]
         public int VendedorId { get; set; }
     }
 
     /// <summary>
-    /// DTO de lectura completo para exponer el estado de la subasta y su oferta m�s alta.
+    /// DTO de lectura completo para exponer el estado de la subasta y su oferta más alta.
     /// </summary>
     public class SubastaResponseDto
     {
@@ -73,9 +74,4 @@ namespace PROYECTO_SUBASTA.Application.DTOs
         public DateTime FechaCreacion { get; set; }
         public string PostorAnonimo { get; set; } = string.Empty;
     }
-
-    /// <summary>
-    /// DTO de entrada para registrar una nueva oferta con soporte de Concurrencia Optimista.
-    /// </summary>
-    
 }

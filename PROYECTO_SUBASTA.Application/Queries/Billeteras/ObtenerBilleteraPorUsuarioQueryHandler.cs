@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using PROYECTO_SUBASTA.Application.DTOs;
+using PROYECTO_SUBASTA.Application.Mappers;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Domain.Entities;
 
@@ -17,11 +18,11 @@ namespace PROYECTO_SUBASTA.Application.Queries.Billeteras
     public class ObtenerBilleteraPorUsuarioQueryHandler
     {
         private readonly IBilleteraRepository _billeteraRepository;
-        private readonly IRepository<TransactionLedger> _ledgerRepository;
+        private readonly ILedgerRepository _ledgerRepository;
 
         public ObtenerBilleteraPorUsuarioQueryHandler(
             IBilleteraRepository billeteraRepository,
-            IRepository<TransactionLedger> ledgerRepository)
+            ILedgerRepository ledgerRepository)
         {
             _billeteraRepository = billeteraRepository ?? throw new ArgumentNullException(nameof(billeteraRepository));
             _ledgerRepository = ledgerRepository ?? throw new ArgumentNullException(nameof(ledgerRepository));
@@ -36,20 +37,9 @@ namespace PROYECTO_SUBASTA.Application.Queries.Billeteras
             if (billetera == null)
                 return null;
 
-            var movimientos = await _ledgerRepository.GetAllAsync();
+            var movimientos = await _ledgerRepository.ObtenerPorBilleteraAsync(billetera.Id, cancellationToken);
             var movimientosUsuario = movimientos
-                .Where(m => m.BilleteraId == billetera.Id)
-                .OrderByDescending(m => m.Fecha)
-                .Select(m => new MovimientoLedgerDto
-                {
-                    Id = m.Id,
-                    BilleteraId = m.BilleteraId,
-                    TipoTransaccion = m.Tipo.ToString(),
-                    Monto = m.Monto,
-                    Fecha = m.Fecha,
-                    SubastaId = m.SubastaId,
-                    Concepto = $"{m.Tipo} {(m.SubastaId.HasValue ? $"en Subasta #{m.SubastaId}" : "de fondos")} por ${m.Monto:N2}"
-                })
+                .Select(LedgerMapper.MapearADto)
                 .ToList();
 
             return new BilleteraResponseDto
@@ -73,11 +63,11 @@ namespace PROYECTO_SUBASTA.Application.Queries.Billeteras
     public class ObtenerMovimientosQueryHandler
     {
         private readonly IBilleteraRepository _billeteraRepository;
-        private readonly IRepository<TransactionLedger> _ledgerRepository;
+        private readonly ILedgerRepository _ledgerRepository;
 
         public ObtenerMovimientosQueryHandler(
             IBilleteraRepository billeteraRepository,
-            IRepository<TransactionLedger> ledgerRepository)
+            ILedgerRepository ledgerRepository)
         {
             _billeteraRepository = billeteraRepository ?? throw new ArgumentNullException(nameof(billeteraRepository));
             _ledgerRepository = ledgerRepository ?? throw new ArgumentNullException(nameof(ledgerRepository));
@@ -92,20 +82,9 @@ namespace PROYECTO_SUBASTA.Application.Queries.Billeteras
             if (billetera == null)
                 return Enumerable.Empty<MovimientoLedgerDto>();
 
-            var movimientos = await _ledgerRepository.GetAllAsync();
+            var movimientos = await _ledgerRepository.ObtenerPorBilleteraAsync(billetera.Id, cancellationToken);
             return movimientos
-                .Where(m => m.BilleteraId == billetera.Id)
-                .OrderByDescending(m => m.Fecha)
-                .Select(m => new MovimientoLedgerDto
-                {
-                    Id = m.Id,
-                    BilleteraId = m.BilleteraId,
-                    TipoTransaccion = m.Tipo.ToString(),
-                    Monto = m.Monto,
-                    Fecha = m.Fecha,
-                    SubastaId = m.SubastaId,
-                    Concepto = $"{m.Tipo} {(m.SubastaId.HasValue ? $"en Subasta #{m.SubastaId}" : "de fondos")} por ${m.Monto:N2}"
-                })
+                .Select(LedgerMapper.MapearADto)
                 .ToList();
         }
     }

@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Application.Constants;
 using PROYECTO_SUBASTA.Application.DTOs;
 using PROYECTO_SUBASTA.Application.Exceptions;
+using PROYECTO_SUBASTA.Application.Mappers;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Domain.Entities;
+using PROYECTO_SUBASTA.Domain.Exceptions;
 
 namespace PROYECTO_SUBASTA.Application.Commands.Subastas
 {
@@ -37,6 +40,11 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
 
+            if (command.VersionCliente <= 0)
+            {
+                throw new ReglaNegocioException("La versión de la subasta es obligatoria y debe ser mayor a cero.");
+            }
+
             // 1. Iniciar la transacción atómica gestionada por Unit of Work
             await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
@@ -49,8 +57,8 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
                     throw new KeyNotFoundException($"No se encontró la subasta con ID {command.SubastaId}.");
                 }
 
-                // Asegurar versión para control de concurrencia optimista
-                var versionCliente = command.VersionCliente > 0 ? command.VersionCliente : (int)subasta.Version;
+                // Control de concurrencia optimista
+                var versionCliente = command.VersionCliente;
 
                 // Identificar el postor líder previo (si existe)
                 var liderAnterior = subasta.ObtenerPujaLider();
@@ -123,10 +131,19 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
 
                 // 9. Registrar evento de auditoría dentro de la misma transacción
                 await _auditoriaService.RegistrarAsync(
-                    "PUJA_REGISTRADA",
+                    AuditoriaAcciones.PUJA_REGISTRADA,
                     $"Puja de ${command.Monto:N2} registrada con éxito por Usuario #{command.UsuarioId} en Subasta #{subasta.Id}. Garantía Escrow retenida: ${montoARetener:N2}. Anti-Sniping: {(antiSnipingActivado ? "ACTIVADO (+120s)" : "NO")}.",
                     command.UsuarioId
                 );
+
+                if (antiSnipingActivado)
+                {
+                    await _auditoriaService.RegistrarAsync(
+                        AuditoriaAcciones.EXTENSION_ANTISNIPING,
+                        $"Extensión anti-sniping (+120s) aplicada a Subasta #{subasta.Id} por puja de Usuario #{command.UsuarioId}. Nueva fecha de fin: {subasta.FechaFin:u}.",
+                        command.UsuarioId
+                    );
+                }
 
                 // 10. Confirmación atómica de todos los cambios
                 await _unitOfWork.CommitTransactionAsync(cancellationToken);
@@ -139,16 +156,18 @@ namespace PROYECTO_SUBASTA.Application.Commands.Subastas
                     Version = subasta.Version,
                     FechaFin = subasta.FechaFin,
                     AntiSnipingActivado = antiSnipingActivado,
-                    Puja = new PujaItemDto
-                    {
-                        Id = nuevaPuja.Id,
-                        SubastaId = nuevaPuja.SubastaId,
-                        UsuarioId = nuevaPuja.UsuarioId,
-                        Monto = nuevaPuja.Monto,
-                        FechaCreacion = nuevaPuja.FechaCreacion,
-                        PostorAnonimo = $"Postor #{(nuevaPuja.UsuarioId * 33 + 100):X}"
-                    }
+                    Puja = SubastaMapper.MapearPujaADto(nuevaPuja)
                 };
+            }
+            catch (Exception ex) when (ex is DominioException || ex is ReglaNegocioException)
+            {
+                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+                await _auditoriaService.RegistrarFalloAsync(
+                    AuditoriaAcciones.PUJA_RECHAZADA,
+                    $"Puja rechazada en Subasta #{command.SubastaId} para Usuario #{command.UsuarioId} por monto ${command.Monto:N2}. Motivo: {ex.Message}",
+                    command.UsuarioId
+                );
+                throw;
             }
             catch
             {

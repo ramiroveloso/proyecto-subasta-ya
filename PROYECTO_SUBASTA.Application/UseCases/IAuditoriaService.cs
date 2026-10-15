@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using PROYECTO_SUBASTA.Domain.Entities;
@@ -20,5 +21,10 @@ namespace PROYECTO_SUBASTA.Application.UseCases
         Task RegistrarFalloAsync(string accion, string detalle, int? usuarioId = null);
 
         Task<IEnumerable<LogAuditoria>> ObtenerLogsAsync(int limite = 100);
+
+        /// <summary>
+        /// Determina si ya existe un evento registrado para la acción y fragmento de detalle especificados dentro de una ventana de tiempo.
+        /// </summary>
+        Task<bool> ExisteEventoRecienteAsync(string accion, string fragmentoDetalle, TimeSpan ventana);
     }
 }

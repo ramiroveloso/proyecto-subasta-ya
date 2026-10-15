@@ -11,6 +11,7 @@ namespace PROYECTO_SUBASTA.Api.Controllers
     [ApiController]
     [Route("api/[controller]")]
     [Produces("application/json")]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
     public class BilleterasController : ControllerBase
     {
         private readonly ObtenerBilleteraPorUsuarioQueryHandler _obtenerBilleteraHandler;
@@ -32,13 +33,19 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         /// </summary>
         [HttpGet("{usuarioId}")]
         [ProducesResponseType(typeof(BilleteraResponseDto), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ObtenerPorUsuario(int usuarioId)
         {
+            if (usuarioId <= 0)
+            {
+                return BadRequest(new ErrorResponse { StatusCode = 400, Mensaje = "El identificador de usuario debe ser mayor a cero.", Timestamp = System.DateTime.UtcNow });
+            }
+
             var billetera = await _obtenerBilleteraHandler.HandleAsync(new ObtenerBilleteraPorUsuarioQuery { UsuarioId = usuarioId });
             if (billetera == null)
             {
-                return NotFound(new { mensaje = $"No se encontró billetera asociada al usuario con ID {usuarioId}." });
+                return NotFound(new ErrorResponse { StatusCode = 404, Mensaje = $"No se encontró billetera asociada al usuario con ID {usuarioId}.", Timestamp = System.DateTime.UtcNow });
             }
 
             return Ok(billetera);
@@ -49,6 +56,8 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         /// </summary>
         [HttpGet("{usuarioId}/movimientos")]
         [ProducesResponseType(typeof(IEnumerable<MovimientoLedgerDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ObtenerMovimientos(int usuarioId)
         {
             var movimientos = await _obtenerMovimientosHandler.HandleAsync(new ObtenerMovimientosQuery { UsuarioId = usuarioId });
@@ -56,51 +65,23 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         }
 
         /// <summary>
-        /// Permite la recarga de saldo simulado en la cuenta del usuario.
-        /// Bloquea explícitamente operaciones inseguras de retención o liberación manual de Escrow.
+        /// Registra un depósito de fondos en la billetera del usuario.
         /// </summary>
-        [HttpPost("{usuarioId}/movimientos")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> RegistrarMovimiento(int usuarioId, [FromBody] RegistrarMovimientoDto dto)
+        [HttpPost("{usuarioId}/depositos")]
+        [ProducesResponseType(typeof(MovimientoLedgerDto), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Depositar(int usuarioId, [FromBody] CargarSaldoDto dto)
         {
-            if (dto == null || dto.Monto <= 0)
-            {
-                return BadRequest(new { mensaje = "El monto a procesar debe ser mayor a cero." });
-            }
-
             var idUsuario = usuarioId > 0 ? usuarioId : (dto.UsuarioId ?? 0);
-            if (idUsuario <= 0)
+            var command = new CargarSaldoCommand
             {
-                return BadRequest(new { mensaje = "Debe especificar un identificador de usuario válido." });
-            }
+                UsuarioId = idUsuario,
+                Monto = dto.Monto
+            };
 
-            var tipo = (dto.Tipo ?? string.Empty).Trim().ToUpperInvariant();
-
-            // Bloqueo de seguridad: Las retenciones y liberaciones solo deben ser gestionadas por el motor transaccional de pujas/cierre
-            if (tipo == "RETENCION" || tipo == "LIBERACION")
-            {
-                return BadRequest(new
-                {
-                    mensaje = $"Operación '{tipo}' denegada por seguridad: Las retenciones y liberaciones son administradas exclusivamente por el motor de Escrow transaccional y no pueden ser ejecutadas directamente."
-                });
-            }
-
-            if (string.IsNullOrEmpty(tipo) || tipo == "CARGA" || tipo == "DEPOSITO")
-            {
-                await _cargarSaldoHandler.HandleAsync(new CargarSaldoCommand
-                {
-                    UsuarioId = idUsuario,
-                    Monto = dto.Monto
-                });
-
-                return Ok(new { mensaje = "Saldo acreditado correctamente." });
-            }
-
-            return BadRequest(new
-            {
-                mensaje = $"Tipo de movimiento '{dto.Tipo}' no válido. Operaciones permitidas para clientes: DEPOSITO / CARGA."
-            });
+            var movimiento = await _cargarSaldoHandler.HandleAsync(command);
+            return CreatedAtAction(nameof(ObtenerPorUsuario), new { usuarioId = idUsuario }, movimiento);
         }
     }
 }

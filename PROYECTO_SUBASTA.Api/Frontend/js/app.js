@@ -1,9 +1,9 @@
 /**
  * SubastaYa - Lógica de Aplicación Frontend & Controlador de Módulos
- * Incluye Carga de Saldo Libre para Perfil Tester: Ramiro Veloso
  */
 
-let usuarioActual = (typeof PERFILES_SEMILLA !== 'undefined' && PERFILES_SEMILLA.length > 0) ? (PERFILES_SEMILLA[1] || PERFILES_SEMILLA[0]) : null;
+let usuarioActual = null;
+let usuariosDisponibles = [];
 
 let subastasCache = [];
 let categoriasCache = [];
@@ -11,6 +11,33 @@ let subastaSeleccionadaSala = null;
 let timerSalaInterval = null;
 let timerCardsInterval = null;
 let contadorSyncInterval = 0;
+
+let timerPollingSala = null;
+let sincronizandoSala = false;
+let timerPollingCatalogo = null;
+let sincronizandoCatalogo = false;
+
+/* ==========================================================================
+   HELPERS DE SANITIZACIÓN & SEGURIDAD XSS
+   ========================================================================== */
+function escaparHtml(valor) {
+    if (valor === null || valor === undefined) return '';
+    return String(valor)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function sanitizarUrlImagen(url) {
+    if (!url || typeof url !== 'string') return 'assets/images/watch.png';
+    const trimmed = url.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return escaparHtml(trimmed);
+    }
+    return 'assets/images/watch.png';
+}
 
 /* ==========================================================================
    GESTIÓN DE SESIÓN & AUTENTICACIÓN MULTI-PERFIL
@@ -60,8 +87,7 @@ async function iniciarSesion(usuario) {
         id: usuario.id ?? usuario.Id,
         nombre: usuario.nombre ?? usuario.Nombre,
         email: usuario.email ?? usuario.Email,
-        rol: usuario.rol ?? usuario.Rol ?? ((usuario.id === 99 || (usuario.email || '').toLowerCase() === 'admin@subastaya.com') ? 'ADMIN' : undefined),
-        saldoInicial: usuario.saldoInicial ?? 0
+        rol: usuario.rol ?? usuario.Rol ?? (((usuario.email || '').toLowerCase().includes('admin')) ? 'ADMIN' : undefined)
     };
     guardarSesion(usuarioActual);
     ocultarModalLogin();
@@ -81,11 +107,20 @@ async function iniciarSesion(usuario) {
         validarPujaEnVivo();
     }
 
+    const tabSala = document.getElementById('content-sala');
+    if (tabSala && tabSala.classList.contains('active')) {
+        iniciarPollingSala();
+    } else {
+        iniciarPollingCatalogo();
+    }
+
     const rol = obtenerRolUsuario(usuarioActual);
-    mostrarToast(`¡Bienvenido/a <strong>${usuarioActual.nombre}</strong>! Rol activo: <span class="badge bg-light text-dark border">${rol}</span>`, 'Sesión Iniciada', 'success');
+    mostrarToast(`¡Bienvenido/a <strong>${escaparHtml(usuarioActual.nombre)}</strong>! Rol activo: <span class="badge bg-light text-dark border">${escaparHtml(rol)}</span>`, 'Sesión Iniciada', 'success');
 }
 
 function cerrarSesion() {
+    detenerPollingSala();
+    detenerPollingCatalogo();
     borrarSesion();
     usuarioActual = null;
     actualizarVisibilidadAuditoria();
@@ -118,7 +153,7 @@ function cerrarSesion() {
 
 function obtenerRolUsuario(usuario) {
     if (!usuario) return 'Usuario';
-    if (usuario.rol === 'ADMIN' || usuario.Rol === 'ADMIN' || usuario.id === 99 || (usuario.email || '').toLowerCase() === 'admin@subastaya.com') return 'Administrador';
+    if (usuario.rol === 'ADMIN' || usuario.Rol === 'ADMIN') return 'Administrador';
     const email = (usuario.email || '').toLowerCase();
     const nombre = (usuario.nombre || '').toLowerCase();
     if (email.includes('admin') || nombre.includes('administrador')) return 'Administrador';
@@ -126,7 +161,6 @@ function obtenerRolUsuario(usuario) {
     if (email.includes('comprador1') || nombre.includes('líder') || nombre.includes('lider')) return 'Comprador Líder';
     if (email.includes('comprador2') || nombre.includes('habilitado')) return 'Comprador Habilitado';
     if (email.includes('sinfondos') || nombre.includes('sin fondos')) return 'Usuario Sin Saldo';
-    if (email.includes('tester') || nombre.includes('tester')) return 'Tester Ramiro Veloso';
     return 'Comprador';
 }
 
@@ -153,30 +187,27 @@ async function cargarPerfilesEnLogin() {
     try {
         const usuarios = await fetchObtenerUsuarios();
         if (usuarios && usuarios.length > 0) {
-            PERFILES_SEMILLA = usuarios.map(u => ({
+            usuariosDisponibles = usuarios.map(u => ({
                 id: u.id ?? u.Id,
                 nombre: u.nombre ?? u.Nombre,
                 email: u.email ?? u.Email,
-                rol: u.rol ?? u.Rol ?? ((u.id === 99 || u.Id === 99 || (u.email || u.Email || '').toLowerCase() === 'admin@subastaya.com') ? 'ADMIN' : undefined),
-                saldoInicial: u.saldoInicial ?? u.SaldoInicial ?? 0
+                rol: u.rol ?? u.Rol ?? (((u.email || u.Email || '').toLowerCase().includes('admin')) ? 'ADMIN' : undefined)
             }));
-            if (!PERFILES_SEMILLA.some(p => p.id === 99 || (p.email || '').toLowerCase() === 'admin@subastaya.com')) {
-                PERFILES_SEMILLA.push({
-                    id: 99,
-                    nombre: 'Administrador del Sistema',
-                    email: 'admin@subastaya.com',
-                    rol: 'ADMIN',
-                    saldoInicial: 0
-                });
-            }
+        } else {
+            usuariosDisponibles = [];
         }
 
         const billeteras = await Promise.all(
-            PERFILES_SEMILLA.map(p => fetchObtenerBilletera(p.id).catch(() => null))
+            usuariosDisponibles.map(p => fetchObtenerBilletera(p.id).catch(() => null))
         );
 
         grid.innerHTML = '';
-        PERFILES_SEMILLA.forEach((p, idx) => {
+        if (usuariosDisponibles.length === 0) {
+            grid.innerHTML = '<div class="col-12 text-center text-muted py-3">No hay perfiles disponibles en el sistema.</div>';
+            return;
+        }
+
+        usuariosDisponibles.forEach((p, idx) => {
             const b = billeteras[idx];
             const saldoDisp = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
             const rol = obtenerRolUsuario(p);
@@ -202,18 +233,18 @@ async function cargarPerfilesEnLogin() {
             const col = document.createElement('div');
             col.className = 'col-sm-6';
             col.innerHTML = `
-                <div class="profile-card-option ${esActivo ? 'active-profile' : ''}" onclick="seleccionarPerfilParaLogin(${p.id})">
+                <div class="profile-card-option ${esActivo ? 'active-profile' : ''}" onclick="seleccionarPerfilParaLogin(${Number(p.id)})">
                     <div class="d-flex align-items-center mb-2">
                         <div class="profile-avatar me-3 shadow-sm" style="background-color: ${avatarBg};">
-                            ${iniciales}
+                            ${escaparHtml(iniciales)}
                         </div>
                         <div class="text-truncate flex-grow-1">
-                            <div class="fw-bold text-dark text-truncate">${p.nombre}</div>
-                            <div class="extra-small text-muted text-truncate">${p.email}</div>
+                            <div class="fw-bold text-dark text-truncate">${escaparHtml(p.nombre)}</div>
+                            <div class="extra-small text-muted text-truncate">${escaparHtml(p.email)}</div>
                         </div>
                     </div>
                     <div class="d-flex justify-content-between align-items-center pt-2 border-top mt-2">
-                        <span class="badge ${badgeRolClass} extra-small">${rol}</span>
+                        <span class="badge ${badgeRolClass} extra-small">${escaparHtml(rol)}</span>
                         <span class="font-monospace fw-bold ${saldoDisp > 0 ? 'text-success' : 'text-danger'} small">
                             $${saldoDisp.toLocaleString('es-AR')}
                         </span>
@@ -234,10 +265,7 @@ async function cargarPerfilesEnLogin() {
 }
 
 function iniciarSesionPorId(perfilId) {
-    const perfil = PERFILES_SEMILLA.find(p => p.id === perfilId);
-    if (perfil) {
-        iniciarSesion(perfil);
-    }
+    seleccionarPerfilParaLogin(perfilId);
 }
 
 async function procesarLoginCredenciales(event) {
@@ -264,8 +292,11 @@ async function procesarLoginCredenciales(event) {
         document.getElementById('form-login-credenciales')?.reset();
     } catch (err) {
         if (alertError && textError) {
-            textError.textContent = err.message || 'Usuario o contraseña no reconocidos.';
+            textError.textContent = err.mensaje || err.message || 'Usuario o contraseña no reconocidos.';
             alertError.classList.remove('d-none');
+        }
+        if (err.status === 0 || err.status >= 500) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => procesarLoginCredenciales(event));
         }
     } finally {
         setBotonCargando('btn-login-submit', 'spinner-login', 'text-login', false);
@@ -476,45 +507,43 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // 1. Cargar perfiles dinámicamente desde la Base de Datos / API
-    const usuariosRemotos = await fetchObtenerUsuarios();
+    let usuariosRemotos = [];
+    try {
+        usuariosRemotos = await fetchObtenerUsuarios();
+    } catch (_) {
+        usuariosRemotos = [];
+    }
+
     if (usuariosRemotos && usuariosRemotos.length > 0) {
-        PERFILES_SEMILLA = usuariosRemotos.map(u => ({
+        usuariosDisponibles = usuariosRemotos.map(u => ({
             id: u.id ?? u.Id,
             nombre: u.nombre ?? u.Nombre,
             email: u.email ?? u.Email,
-            rol: u.rol ?? u.Rol ?? ((u.id === 99 || u.Id === 99 || (u.email || u.Email || '').toLowerCase() === 'admin@subastaya.com') ? 'ADMIN' : undefined),
-            saldoInicial: u.saldoInicial ?? u.SaldoInicial ?? 0
+            rol: u.rol ?? u.Rol ?? (((u.email || u.Email || '').toLowerCase().includes('admin')) ? 'ADMIN' : undefined)
         }));
-        if (!PERFILES_SEMILLA.some(p => p.id === 99 || (p.email || '').toLowerCase() === 'admin@subastaya.com')) {
-            PERFILES_SEMILLA.push({
-                id: 99,
-                nombre: 'Administrador del Sistema',
-                email: 'admin@subastaya.com',
-                rol: 'ADMIN',
-                saldoInicial: 0
-            });
-        }
     }
 
     // 2. Verificar si existe una sesión guardada en localStorage
     const sesionGuardada = obtenerSesionGuardada();
     if (sesionGuardada) {
-        const usuarioEncontrado = PERFILES_SEMILLA.find(p => p.id === sesionGuardada.id || p.email === sesionGuardada.email);
+        const usuarioEncontrado = usuariosDisponibles.find(p => p.id === sesionGuardada.id || p.email === sesionGuardada.email);
         usuarioActual = usuarioEncontrado || sesionGuardada;
-        if (usuarioActual.id === 99 || (usuarioActual.email || '').toLowerCase() === 'admin@subastaya.com') {
-            usuarioActual.rol = 'ADMIN';
-        }
         ocultarModalLogin();
     } else {
-        // No hay sesión activa: mostrar pantalla de bienvenida / login bloqueante
-        usuarioActual = PERFILES_SEMILLA[1] || PERFILES_SEMILLA[0] || null;
-        mostrarModalLogin();
+        usuarioActual = usuariosDisponibles[1] || usuariosDisponibles[0] || null;
+        if (!usuarioActual) {
+            mostrarModalLogin();
+        } else {
+            guardarSesion(usuarioActual);
+            ocultarModalLogin();
+        }
     }
 
     actualizarVisibilidadAuditoria();
     await renderizarSelectorPerfilesSemilla();
     await cargarCategorias();
     await aplicarFiltros();
+    iniciarPollingCatalogo();
     await actualizarBilleteraUI();
     await cargarMisActividades();
     if (usuarioActual && usuarioActual.rol === 'ADMIN') {
@@ -525,7 +554,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 /* ==========================================================================
-   PERFILES SEMILLA & USUARIO TESTER (RAMIRO VELOSO)
    SINCRONISMO DE SALDOS EN TIEMPO REAL
    ========================================================================== */
 
@@ -584,16 +612,16 @@ async function renderizarSelectorPerfilesSemilla() {
         <li class="p-3">
             <div class="d-flex align-items-center mb-3">
                 <div class="navbar-user-avatar me-3 shadow-sm" style="width: 44px; height: 44px; font-size: 1.05rem;">
-                    ${obtenerIniciales(usuarioActual.nombre)}
+                    ${escaparHtml(obtenerIniciales(usuarioActual.nombre))}
                 </div>
                 <div class="text-truncate">
-                    <div class="fw-bold text-dark text-truncate fs-6">${usuarioActual.nombre}</div>
-                    <div class="extra-small text-muted text-truncate">${usuarioActual.email}</div>
+                    <div class="fw-bold text-dark text-truncate fs-6">${escaparHtml(usuarioActual.nombre)}</div>
+                    <div class="extra-small text-muted text-truncate">${escaparHtml(usuarioActual.email)}</div>
                 </div>
             </div>
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <span class="badge ${usuarioActual.rol === 'ADMIN' ? 'bg-dark text-white' : 'bg-primary-subtle text-primary border border-primary-subtle'} extra-small px-2 py-1">${rol}</span>
-                <span class="extra-small text-muted font-monospace">ID Usuario: #${usuarioActual.id}</span>
+                <span class="badge ${usuarioActual.rol === 'ADMIN' ? 'bg-dark text-white' : 'bg-primary-subtle text-primary border border-primary-subtle'} extra-small px-2 py-1">${escaparHtml(rol)}</span>
+                <span class="extra-small text-muted font-monospace">ID Usuario: #${Number(usuarioActual.id)}</span>
             </div>
             <div class="bg-light p-2 rounded-3 border mb-1">
                 <div class="row g-2 text-center font-monospace">
@@ -678,23 +706,26 @@ function actualizarBadgeUsuarioEnDropdown(usuarioId, nuevoSaldo, nuevoSaldoReten
 }
 
 async function cambiarPerfilSemilla(usuarioId) {
-    const perfil = PERFILES_SEMILLA.find(p => p.id === usuarioId);
+    const perfil = usuariosDisponibles.find(p => p.id === usuarioId);
     if (!perfil) return;
     await iniciarSesion(perfil);
 }
 
-/** Carga de Saldo Libre Inmediata (1-Click) para Pruebas del Tester */
+/** Carga de Saldo Rápida */
 async function cargarSaldoLibreRapido(monto) {
     try {
         await fetchCargarSaldo(usuarioActual.id, monto);
-        mostrarToast(`⚡ <strong>¡Carga Libre Acreditada!</strong> +$${monto.toLocaleString()} añadidos al disponible de ${usuarioActual.nombre}.`, 'Fondos Acreditados (Modo Tester)', 'success');
+        mostrarToast(`⚡ <strong>¡Carga Acreditada!</strong> +$${monto.toLocaleString()} añadidos a la cuenta de ${escaparHtml(usuarioActual.nombre)}.`, 'Fondos Acreditados', 'success');
         
-        usuarioActual.saldoInicial = (usuarioActual.saldoInicial || 0) + monto;
         await actualizarBilleteraUI();
         await renderizarSelectorPerfilesSemilla();
         await cargarLogsAuditoria();
     } catch (e) {
-        mostrarToast(`Error al recargar: ${e.message}`, 'Error', 'danger');
+        if (e && (e.status === 0 || e.status >= 500)) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => cargarSaldoLibreRapido(monto));
+        } else {
+            mostrarToast(`Error al recargar: ${escaparHtml(e.mensaje || e.message)}`, 'Error', 'danger');
+        }
     }
 }
 
@@ -715,14 +746,14 @@ async function cargarCategorias() {
         if (selectFiltro) {
             selectFiltro.innerHTML = '<option value="">Todas las categorías</option>';
             categoriasCache.forEach(c => {
-                selectFiltro.innerHTML += `<option value="${c.id}">${c.nombre}</option>`;
+                selectFiltro.innerHTML += `<option value="${Number(c.id)}">${escaparHtml(c.nombre)}</option>`;
             });
         }
 
         if (selectCrear) {
             selectCrear.innerHTML = '<option value="">Seleccione una categoría</option>';
             categoriasCache.forEach(c => {
-                selectCrear.innerHTML += `<option value="${c.id}">${c.nombre}</option>`;
+                selectCrear.innerHTML += `<option value="${Number(c.id)}">${escaparHtml(c.nombre)}</option>`;
             });
         }
     } catch (e) {
@@ -779,55 +810,51 @@ function renderizarSkeletonsBilletera(filas = 4) {
     tbody.innerHTML = skeletonsHtml;
 }
 
-async function aplicarFiltros() {
+let catalogoPaginaActual = 1;
+const catalogoTamanoPagina = 6;
+let catalogoTotalSubastas = 0;
+
+function cambiarFiltroCatalogo() {
+    catalogoPaginaActual = 1;
+    aplicarFiltros(1);
+}
+
+async function aplicarFiltros(pagina = catalogoPaginaActual, silencioso = false) {
     const grid = document.getElementById('catalogo-grid');
     if (!grid) return;
 
-    renderizarSkeletonsCatalogo(6);
+    catalogoPaginaActual = (typeof pagina === 'number' && pagina > 0) ? pagina : 1;
+    if (!silencioso) {
+        renderizarSkeletonsCatalogo(catalogoTamanoPagina);
+    }
 
     try {
-        subastasCache = await fetchObtenerSubastas();
-        
-        const textoFiltro = (document.getElementById('filtro-busqueda')?.value || '').toLowerCase().trim();
-        const estadoFiltro = document.getElementById('filtro-estado')?.value || '';
-        const categoriaFiltro = document.getElementById('filtro-categoria')?.value || '';
-        const ordenFiltro = document.getElementById('filtro-orden')?.value || 'tiempo';
+        const catVal = document.getElementById('filtro-categoria')?.value;
+        const categoriaId = catVal ? parseInt(catVal, 10) : null;
+        const estado = document.getElementById('filtro-estado')?.value || null;
+        const minVal = document.getElementById('filtro-precio-min')?.value;
+        const maxVal = document.getElementById('filtro-precio-max')?.value;
+        const precioMin = (minVal !== '' && minVal !== undefined && !isNaN(parseFloat(minVal))) ? parseFloat(minVal) : null;
+        const precioMax = (maxVal !== '' && maxVal !== undefined && !isNaN(parseFloat(maxVal))) ? parseFloat(maxVal) : null;
+        const orden = document.getElementById('filtro-orden')?.value || 'cierre';
 
-        let subastasFiltradas = subastasCache.filter(sub => {
-            const estadoReal = determinarEstadoSubasta(sub);
-            const coincideTexto = !textoFiltro || 
-                (sub.titulo || '').toLowerCase().includes(textoFiltro) || 
-                (sub.descripcion && sub.descripcion.toLowerCase().includes(textoFiltro));
-            
-            let coincideEstado = true;
-            if (estadoFiltro) {
-                if (estadoFiltro === 'FINALIZADA') {
-                    coincideEstado = (estadoReal === 'FINALIZADA' || estadoReal === 'DESIERTA');
-                } else {
-                    coincideEstado = (estadoReal === estadoFiltro);
-                }
-            }
-
-            const subCatId = sub.categoriaId ?? sub.CategoriaId;
-            const coincideCategoria = !categoriaFiltro || subCatId == categoriaFiltro;
-            return coincideTexto && coincideEstado && coincideCategoria;
+        const res = await fetchObtenerSubastas({
+            categoriaId: (categoriaId && categoriaId > 0) ? categoriaId : null,
+            estado: estado || null,
+            precioMin: precioMin,
+            precioMax: precioMax,
+            orden: orden,
+            pagina: catalogoPaginaActual,
+            tamanoPagina: catalogoTamanoPagina
         });
 
-        if (ordenFiltro === 'tiempo') {
-            subastasFiltradas.sort((a, b) => {
-                const finA = parseUtcDate(a.fechaFin ?? a.FechaFin)?.getTime() || 0;
-                const finB = parseUtcDate(b.fechaFin ?? b.FechaFin)?.getTime() || 0;
-                return finA - finB;
-            });
-        } else if (ordenFiltro === 'puja') {
-            subastasFiltradas.sort((a, b) => obtenerPujaMaxima(b) - obtenerPujaMaxima(a));
-        } else if (ordenFiltro === 'precio') {
-            subastasFiltradas.sort((a, b) => (a.precioBase ?? a.PrecioBase ?? 0) - (b.precioBase ?? b.PrecioBase ?? 0));
-        }
+        const subastas = res.items || (Array.isArray(res) ? res : []);
+        catalogoTotalSubastas = typeof res.total === 'number' ? res.total : subastas.length;
+        subastasCache = subastas;
 
         grid.innerHTML = '';
 
-        if (subastasFiltradas.length === 0) {
+        if (subastas.length === 0) {
             grid.innerHTML = `
                 <div class="col-12 text-center text-muted py-5">
                     <i class="fa-solid fa-box-open fa-3x mb-3 text-secondary opacity-50"></i>
@@ -835,23 +862,25 @@ async function aplicarFiltros() {
                     <p class="small">Ajusta los filtros de búsqueda o categoría.</p>
                 </div>
             `;
+            renderizarPaginacionCatalogo(0, catalogoPaginaActual, catalogoTamanoPagina);
             return;
         }
 
-        subastasFiltradas.forEach(sub => {
-            const subId = sub.id ?? sub.Id;
-            const subTitulo = sub.titulo ?? sub.Titulo ?? `Subasta #${subId}`;
+        subastas.forEach(sub => {
+            const subId = Number(sub.id ?? sub.Id);
+            const subTitulo = escaparHtml(sub.titulo ?? sub.Titulo ?? `Subasta #${subId}`);
             const subCatId = sub.categoriaId ?? sub.CategoriaId;
-            const categoria = categoriasCache.find(c => c.id == subCatId)?.nombre || 'General';
+            const categoria = escaparHtml(categoriasCache.find(c => c.id == subCatId)?.nombre || 'General');
             const pujaActual = obtenerPujaMaxima(sub);
             const subEstado = determinarEstadoSubasta(sub);
             const badgeClass = getEstadoBadgeClass(subEstado);
-            const imagenUrl = sub.urlImagen ?? sub.UrlImagen ?? 'assets/images/watch.png';
+            const imagenUrl = sanitizarUrlImagen(sub.urlImagen ?? sub.UrlImagen);
             const pujas = sub.pujas ?? sub.Pujas ?? [];
             const totalOfertas = pujas.length;
             const subPrecioBase = sub.precioBase ?? sub.PrecioBase ?? 0;
             const fechaInicioStr = sub.fechaInicio ?? sub.FechaInicio;
             const fechaFinStr = sub.fechaFin ?? sub.FechaFin;
+            const subDescripcion = escaparHtml(sub.descripcion ?? sub.Descripcion ?? 'Sin descripción disponible.');
 
             // Determinar estado de liderazgo del usuario activo en esta subasta
             const misPujasEnSub = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual?.id);
@@ -942,7 +971,7 @@ async function aplicarFiltros() {
                             <span class="card-user-leadership ms-2 flex-shrink-0">${userBadgeHtml}</span>
                         </div>
                         <p class="card-text text-muted small flex-grow-1 text-truncate-2" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px;">
-                            ${sub.descripcion ?? sub.Descripcion ?? 'Sin descripción disponible.'}
+                            ${subDescripcion}
                         </p>
                         
                         <div class="bg-light p-2 rounded-3 my-2 border">
@@ -961,7 +990,7 @@ async function aplicarFiltros() {
                             ${badgeTimerHtml}
                         </div>
 
-                        <button class="btn ${btnClass} btn-sm w-100 mt-auto card-action-btn" onclick="abrirSalaEnVivo(${subId})">
+                        <button class="btn ${btnClass} btn-sm w-100 mt-auto card-action-btn" onclick="abrirSalaEnVivo(${Number(subId)})">
                             <i class="${btnIcon} me-1"></i> ${btnText}
                         </button>
                     </div>
@@ -972,15 +1001,71 @@ async function aplicarFiltros() {
 
         actualizarTemporizadoresCatalogo();
         actualizarSelectorSalaDirecto();
+        renderizarPaginacionCatalogo(catalogoTotalSubastas, catalogoPaginaActual, catalogoTamanoPagina);
 
     } catch (error) {
         grid.innerHTML = `
             <div class="col-12 text-center text-danger py-4">
                 <i class="fa-solid fa-circle-exclamation fa-2x mb-2"></i>
-                <p>Error al cargar el catálogo: ${error.message}</p>
+                <p>Error al cargar el catálogo: ${escaparHtml(error.mensaje || error.message)}</p>
             </div>
         `;
+        renderizarPaginacionCatalogo(0, 1, catalogoTamanoPagina);
     }
+}
+
+function renderizarPaginacionCatalogo(total, paginaActual, tamanoPagina) {
+    const container = document.getElementById('catalogo-paginacion-container');
+    const info = document.getElementById('catalogo-paginacion-info');
+    const paginacionUl = document.getElementById('catalogo-paginacion');
+    if (!container || !info || !paginacionUl) return;
+
+    if (total <= 0) {
+        info.textContent = '0 subastas encontradas';
+        paginacionUl.innerHTML = '';
+        return;
+    }
+
+    const totalPaginas = Math.ceil(total / tamanoPagina);
+    const desde = (paginaActual - 1) * tamanoPagina + 1;
+    const hasta = Math.min(paginaActual * tamanoPagina, total);
+
+    info.innerHTML = `Mostrando <strong>${desde}</strong> a <strong>${hasta}</strong> de <strong>${total}</strong> subastas`;
+
+    let html = '';
+
+    const prevDisabled = paginaActual <= 1 ? 'disabled' : '';
+    html += `
+        <li class="page-item ${prevDisabled}">
+            <button class="page-link" onclick="aplicarFiltros(${paginaActual - 1})" ${prevDisabled ? 'tabindex="-1" aria-disabled="true"' : ''}>
+                <i class="fa-solid fa-chevron-left extra-small"></i>
+            </button>
+        </li>
+    `;
+
+    for (let p = 1; p <= totalPaginas; p++) {
+        if (p === 1 || p === totalPaginas || (p >= paginaActual - 1 && p <= paginaActual + 1)) {
+            const activa = p === paginaActual ? 'active fw-bold' : '';
+            html += `
+                <li class="page-item ${activa}">
+                    <button class="page-link" onclick="aplicarFiltros(${p})">${p}</button>
+                </li>
+            `;
+        } else if (p === paginaActual - 2 || p === paginaActual + 2) {
+            html += `<li class="page-item disabled"><span class="page-link">…</span></li>`;
+        }
+    }
+
+    const nextDisabled = paginaActual >= totalPaginas ? 'disabled' : '';
+    html += `
+        <li class="page-item ${nextDisabled}">
+            <button class="page-link" onclick="aplicarFiltros(${paginaActual + 1})" ${nextDisabled ? 'tabindex="-1" aria-disabled="true"' : ''}>
+                <i class="fa-solid fa-chevron-right extra-small"></i>
+            </button>
+        </li>
+    `;
+
+    paginacionUl.innerHTML = html;
 }
 
 function obtenerPujaMaxima(subasta) {
@@ -1284,6 +1369,7 @@ async function guardarSubasta(event) {
         if (feedback) feedback.classList.add('d-none');
 
         await aplicarFiltros();
+        await cargarMisActividades();
         const tabCatalogoBtn = document.getElementById('tab-catalogo');
         if (tabCatalogoBtn) {
             const bsTab = new bootstrap.Tab(tabCatalogoBtn);
@@ -1293,10 +1379,14 @@ async function guardarSubasta(event) {
     } catch (err) {
         if (feedback) {
             feedback.className = 'validation-feedback-box alert alert-danger py-2 small mb-3';
-            feedback.innerHTML = `<i class="fa-solid fa-circle-exclamation me-1"></i> Error al publicar: ${err.message}`;
+            feedback.innerHTML = `<i class="fa-solid fa-circle-exclamation me-1"></i> Error al publicar: ${escaparHtml(err.mensaje || err.message)}`;
             feedback.classList.remove('d-none');
         }
-        mostrarToast(`Error al crear subasta: ${err.message}`, 'Error de Servidor', 'danger');
+        if (err.status === 0 || err.status >= 500) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => guardarSubasta(event));
+        } else {
+            mostrarToast(`Error al crear subasta: ${escaparHtml(err.mensaje || err.message)}`, 'Error de Servidor', 'danger');
+        }
     } finally {
         setBotonCargando('btn-crear-subasta', 'spinner-crear', 'text-crear', false);
     }
@@ -1322,7 +1412,7 @@ function actualizarSelectorSalaDirecto() {
     select.innerHTML = '<option value="">-- Seleccionar Subasta --</option>';
     subastasCache.forEach(s => {
         const est = determinarEstadoSubasta(s);
-        select.innerHTML += `<option value="${s.id}">[${est}] ${s.titulo} - ($${obtenerPujaMaxima(s).toLocaleString('es-AR')})</option>`;
+        select.innerHTML += `<option value="${Number(s.id)}">[${est}] ${escaparHtml(s.titulo)} - ($${obtenerPujaMaxima(s).toLocaleString('es-AR')})</option>`;
     });
 
     if (subastaSeleccionadaSala) {
@@ -1342,7 +1432,7 @@ async function cargarSalaEnVivo(subastaId) {
 
         document.getElementById('sala-titulo').textContent = subastaSeleccionadaSala.titulo;
         document.getElementById('sala-descripcion').textContent = subastaSeleccionadaSala.descripcion || 'Sin descripción.';
-        document.getElementById('sala-imagen').src = subastaSeleccionadaSala.urlImagen || 'assets/images/watch.png';
+        document.getElementById('sala-imagen').src = sanitizarUrlImagen(subastaSeleccionadaSala.urlImagen);
         
         const catNombre = categoriasCache.find(c => c.id == subastaSeleccionadaSala.categoriaId)?.nombre || 'General';
         document.getElementById('sala-categoria-badge').textContent = catNombre;
@@ -1378,8 +1468,173 @@ async function cargarSalaEnVivo(subastaId) {
 
         await validarPujaEnVivo();
 
+        iniciarPollingSala();
+        detenerPollingCatalogo();
+
     } catch (e) {
         mostrarToast('No se pudo cargar la sala en vivo.', 'Error', 'danger');
+    }
+}
+
+/* ==========================================================================
+   MÓDULO DE SINCRONIZACIÓN EN VIVO (POLLING RECURSIVO CON SETTIMEOUT)
+   ========================================================================== */
+
+function calcularSiUsuarioEsLider(subasta, usuarioId) {
+    if (!subasta || !usuarioId) return false;
+    const pujas = subasta.pujas || subasta.Pujas || [];
+    if (pujas.length === 0) return false;
+    const sorted = [...pujas].sort((a, b) => (b.monto ?? b.Monto ?? 0) - (a.monto ?? a.Monto ?? 0));
+    const mayor = sorted[0];
+    return (mayor.usuarioId ?? mayor.UsuarioId) === usuarioId;
+}
+
+function iniciarPollingSala() {
+    detenerPollingSala();
+    if (!subastaSeleccionadaSala || !usuarioActual) return;
+    timerPollingSala = setTimeout(ejecutarPollingSala, 2500);
+}
+
+function detenerPollingSala() {
+    if (timerPollingSala) {
+        clearTimeout(timerPollingSala);
+        timerPollingSala = null;
+    }
+    sincronizandoSala = false;
+}
+
+async function ejecutarPollingSala() {
+    const tabSala = document.getElementById('content-sala');
+    if (!tabSala || !tabSala.classList.contains('active') || !subastaSeleccionadaSala || !usuarioActual) {
+        detenerPollingSala();
+        return;
+    }
+
+    if (document.hidden) {
+        timerPollingSala = setTimeout(ejecutarPollingSala, 2500);
+        return;
+    }
+
+    if (sincronizandoSala) {
+        timerPollingSala = setTimeout(ejecutarPollingSala, 2500);
+        return;
+    }
+
+    sincronizandoSala = true;
+    try {
+        const subId = subastaSeleccionadaSala.id ?? subastaSeleccionadaSala.Id;
+        const [subastaFresca, billeteraFresca] = await Promise.all([
+            fetchObtenerSubastaPorId(subId),
+            fetchObtenerBilletera(usuarioActual.id).catch(() => null)
+        ]);
+
+        if (subastaFresca && subastaSeleccionadaSala && (subastaSeleccionadaSala.id ?? subastaSeleccionadaSala.Id) === subId) {
+            const versionPrevia = Number(subastaSeleccionadaSala.version ?? subastaSeleccionadaSala.Version ?? 0);
+            const versionNueva = Number(subastaFresca.version ?? subastaFresca.Version ?? 0);
+            const cantPujasPrevia = (subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || []).length;
+            const cantPujasNueva = (subastaFresca.pujas || subastaFresca.Pujas || []).length;
+            const fechaFinPrevia = subastaSeleccionadaSala.fechaFin ?? subastaSeleccionadaSala.FechaFin;
+            const fechaFinNueva = subastaFresca.fechaFin ?? subastaFresca.FechaFin;
+
+            const eraLider = calcularSiUsuarioEsLider(subastaSeleccionadaSala, usuarioActual.id);
+            const esLiderAhora = calcularSiUsuarioEsLider(subastaFresca, usuarioActual.id);
+
+            // Toast cuando el usuario deja de ser líder
+            if (eraLider && !esLiderAhora) {
+                const pujaActual = obtenerPujaMaxima(subastaFresca);
+                mostrarToast(`⚡ <strong>¡Tu oferta ha sido superada!</strong> La puja líder actual es de $${pujaActual.toLocaleString('es-AR')}.`, 'Oferta Superada (Outbid)', 'warning');
+            }
+
+            const huboCambio = (versionNueva !== versionPrevia) || 
+                              (cantPujasNueva !== cantPujasPrevia) ||
+                              (fechaFinNueva !== fechaFinPrevia);
+
+            if (huboCambio) {
+                subastaSeleccionadaSala = subastaFresca;
+                if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
+
+                actualizarMonitorPujasSala();
+                actualizarRelojSala();
+                configurarBotonesPujaRapida(subastaSeleccionadaSala.incrementoMinimo ?? subastaSeleccionadaSala.IncrementoMinimo ?? 1000);
+                await validarPujaEnVivo();
+
+                const estadoReal = determinarEstadoSubasta(subastaSeleccionadaSala);
+                const estadoBadge = document.getElementById('sala-estado-badge');
+                if (estadoBadge) {
+                    estadoBadge.className = `badge ${getEstadoBadgeClass(estadoReal)}`;
+                    if (estadoReal === 'PROGRAMADA') {
+                        estadoBadge.textContent = `PROGRAMADA (Inicia: ${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaInicio)})`;
+                    } else if (estadoReal === 'FINALIZADA') {
+                        estadoBadge.textContent = `FINALIZADA (${formatFechaHoraCortaUTC3(subastaSeleccionadaSala.fechaFin)})`;
+                    } else if (estadoReal === 'DESIERTA') {
+                        estadoBadge.textContent = 'DESIERTA (Sin ofertas)';
+                    } else {
+                        estadoBadge.textContent = 'ACTIVA (En Vivo)';
+                    }
+                }
+
+                const idx = subastasCache.findIndex(s => (s.id ?? s.Id) === subId);
+                if (idx !== -1) {
+                    subastasCache[idx] = { ...subastasCache[idx], ...subastaFresca };
+                    actualizarTarjetaCatalogo(subId, obtenerPujaMaxima(subastaFresca));
+                }
+            }
+
+            if (billeteraFresca) {
+                await actualizarBilleteraUI();
+                await sincronizarSaldosDropdown();
+            }
+        }
+    } catch (err) {
+        console.warn("[SubastaYa Polling Sala] Error al sincronizar sala:", err);
+    } finally {
+        sincronizandoSala = false;
+        if (timerPollingSala !== null) {
+            timerPollingSala = setTimeout(ejecutarPollingSala, 2500);
+        }
+    }
+}
+
+function iniciarPollingCatalogo() {
+    detenerPollingCatalogo();
+    timerPollingCatalogo = setTimeout(ejecutarPollingCatalogo, 5000);
+}
+
+function detenerPollingCatalogo() {
+    if (timerPollingCatalogo) {
+        clearTimeout(timerPollingCatalogo);
+        timerPollingCatalogo = null;
+    }
+    sincronizandoCatalogo = false;
+}
+
+async function ejecutarPollingCatalogo() {
+    const tabCat = document.getElementById('content-catalogo');
+    if (!tabCat || !tabCat.classList.contains('active')) {
+        detenerPollingCatalogo();
+        return;
+    }
+
+    if (document.hidden) {
+        timerPollingCatalogo = setTimeout(ejecutarPollingCatalogo, 5000);
+        return;
+    }
+
+    if (sincronizandoCatalogo) {
+        timerPollingCatalogo = setTimeout(ejecutarPollingCatalogo, 5000);
+        return;
+    }
+
+    sincronizandoCatalogo = true;
+    try {
+        await aplicarFiltros(catalogoPaginaActual, true);
+    } catch (e) {
+        console.warn("[SubastaYa Polling Catálogo] Error en refresco:", e);
+    } finally {
+        sincronizandoCatalogo = false;
+        if (timerPollingCatalogo !== null) {
+            timerPollingCatalogo = setTimeout(ejecutarPollingCatalogo, 5000);
+        }
     }
 }
 
@@ -1512,7 +1767,7 @@ function actualizarMonitorPujasSala() {
             bannerLiderazgo.innerHTML = `
                 <i class="fa-solid fa-trophy fs-3 me-3 text-warning"></i>
                 <div>
-                    <h6 class="fw-bold mb-0">¡ESTÁS LIDERANDO LA PUJA! (${usuarioActual.nombre})</h6>
+                    <h6 class="fw-bold mb-0">¡ESTÁS LIDERANDO LA PUJA! (${escaparHtml(usuarioActual.nombre)})</h6>
                     <small>Tu oferta de $${(mayorPuja.monto ?? mayorPuja.Monto).toLocaleString('es-AR')} es la mayor actual y se encuentra retenida en garantía Escrow.</small>
                 </div>
             `;
@@ -1566,8 +1821,9 @@ function actualizarMonitorPujasSala() {
         const esPropia = (p.usuarioId ?? p.UsuarioId) === usuarioActual.id;
         const pMonto = p.monto ?? p.Monto ?? 0;
         const fechaFormat = formatFechaHoraCortaUTC3(p.fechaCreacion ?? p.FechaCreacion);
-        const pUid = p.usuarioId ?? p.UsuarioId;
-        const anonHandle = p.postorAnonimo || `Postor #${(pUid * 33 + 100).toString(16).toUpperCase()}`;
+        const pUid = Number(p.usuarioId ?? p.UsuarioId);
+        const rawAnonHandle = p.postorAnonimo || `Postor #${(pUid * 33 + 100).toString(16).toUpperCase()}`;
+        const anonHandle = escaparHtml(rawAnonHandle);
 
         const item = document.createElement('div');
         item.className = `bid-item p-2 mb-2 ${esLider ? 'highest' : ''}`;
@@ -1680,7 +1936,7 @@ async function validarPujaEnVivo() {
         const b = await fetchObtenerBilletera(usuarioActual.id);
         saldoDisponible = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
     } catch (_) {
-        saldoDisponible = usuarioActual.saldoInicial || 0;
+        saldoDisponible = 0;
     }
 
     const garantiaRequerida = esMiPujaLider ? Math.max(0, montoIngresado - montoLiderPrevio) : montoIngresado;
@@ -1747,57 +2003,29 @@ async function enviarPuja(event) {
         const versionActual = Number(subastaSeleccionadaSala.version ?? subastaSeleccionadaSala.Version ?? 1);
         const resPuja = await fetchRegistrarPuja(subastaSeleccionadaSala.id, usuarioActual.id, montoInput, versionActual);
 
-        let antiSnipingActivado = false;
-        if (resPuja && resPuja.antiSnipingActivado) {
-            antiSnipingActivado = true;
-            if (resPuja.fechaFin) {
-                subastaSeleccionadaSala.fechaFin = resPuja.fechaFin;
-            }
-        } else if (resPuja && resPuja.fechaFin) {
-            subastaSeleccionadaSala.fechaFin = resPuja.fechaFin;
-        } else {
-            const ahora = Date.now();
-            const fechaFinMs = parseUtcDate(subastaSeleccionadaSala.fechaFin).getTime();
-            if ((fechaFinMs - ahora) <= 60000 && (fechaFinMs - ahora) > 0) {
-                subastaSeleccionadaSala.fechaFin = new Date(fechaFinMs + 120000).toISOString();
-                antiSnipingActivado = true;
-            }
-        }
-
-        const anonHandle = `Postor #${(usuarioActual.id * 33 + 100).toString(16).toUpperCase()}`;
-        const nuevaPuja = (resPuja && resPuja.puja) ? resPuja.puja : {
-            id: Date.now(),
-            subastaId: subastaSeleccionadaSala.id,
-            usuarioId: usuarioActual.id,
-            monto: montoInput,
-            fechaCreacion: new Date().toISOString(),
-            postorAnonimo: anonHandle
-        };
-
+        const nuevaPuja = resPuja ? resPuja.puja : null;
         if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
-        if (!subastaSeleccionadaSala.pujas.some(p => p.id === nuevaPuja.id)) {
+        if (nuevaPuja && !subastaSeleccionadaSala.pujas.some(p => p.id === nuevaPuja.id)) {
             subastaSeleccionadaSala.pujas.push(nuevaPuja);
         }
 
-        if (resPuja && (resPuja.version !== undefined && resPuja.version !== null)) {
+        if (resPuja && resPuja.version !== undefined) {
             subastaSeleccionadaSala.version = resPuja.version;
-        } else {
-            subastaSeleccionadaSala.version = Number(subastaSeleccionadaSala.version ?? 1) + 1;
         }
+        if (resPuja && resPuja.fechaFin) {
+            subastaSeleccionadaSala.fechaFin = resPuja.fechaFin;
+        }
+
+        const antiSnipingActivado = Boolean(resPuja && resPuja.antiSnipingActivado);
 
         const indexSub = subastasCache.findIndex(s => s.id === subastaSeleccionadaSala.id);
         if (indexSub !== -1) {
             if (!subastasCache[indexSub].pujas) subastasCache[indexSub].pujas = [];
-            if (!subastasCache[indexSub].pujas.some(p => p.id === nuevaPuja.id)) {
+            if (nuevaPuja && !subastasCache[indexSub].pujas.some(p => p.id === nuevaPuja.id)) {
                 subastasCache[indexSub].pujas.push(nuevaPuja);
             }
             subastasCache[indexSub].fechaFin = subastaSeleccionadaSala.fechaFin;
             subastasCache[indexSub].version = subastaSeleccionadaSala.version;
-        }
-
-        if (typeof MOCK_SUBASTAS !== 'undefined' && antiSnipingActivado) {
-            const mockItem = MOCK_SUBASTAS.find(s => s.id === subastaSeleccionadaSala.id);
-            if (mockItem) mockItem.fechaFin = subastaSeleccionadaSala.fechaFin;
         }
 
         if (antiSnipingActivado) {
@@ -1819,17 +2047,17 @@ async function enviarPuja(event) {
     } catch (err) {
         await cargarLogsAuditoria();
         const errMsg = (err.mensaje || err.message || '').toLowerCase();
-        if (errMsg.includes('saldo') || errMsg.includes('insuficiente') || errMsg.includes('garantía') || errMsg.includes('garantia')) {
-            abrirModalSaldoInsuficiente(montoInput);
+        if (err.status === 400 && (errMsg.includes('saldo') || errMsg.includes('insuficiente') || errMsg.includes('garantía') || errMsg.includes('garantia') || errMsg.includes('fondos'))) {
+            await abrirModalSaldoInsuficiente(montoInput);
         } else if (err.status === 409 || err.isConflict) {
-            // Manejo específico de concurrencia optimista (HTTP 409 Conflict)
+            // Manejo específico de concurrencia optimista (HTTP 409 Conflict):
+            // Refrescar subasta del backend y permitir reintentar con la nueva versión
             try {
                 const subFresca = await fetchObtenerSubastaPorId(subastaSeleccionadaSala.id);
                 subastaSeleccionadaSala.version = subFresca.version ?? subFresca.Version ?? 1;
                 subastaSeleccionadaSala.pujas = subFresca.pujas ?? subFresca.Pujas ?? [];
                 subastaSeleccionadaSala.fechaFin = subFresca.fechaFin ?? subFresca.FechaFin;
                 
-                // Refrescar caché y tarjetas
                 const idx = subastasCache.findIndex(s => (s.id ?? s.Id) === subastaSeleccionadaSala.id);
                 if (idx !== -1) {
                     subastasCache[idx] = { ...subastasCache[idx], ...subFresca };
@@ -1842,11 +2070,12 @@ async function enviarPuja(event) {
                 console.warn("No se pudo refrescar automáticamente la subasta tras conflicto 409:", eRefresh);
             }
 
-            // Mostrar Banner Flotante no intrusivo y Toast
-            mostrarBannerConcurrencia(`⚡ <strong>Tu puja ha sido superada por otra transacción reciente.</strong> Los datos de la sala se han actualizado automáticamente.`);
-            mostrarToast('Tu puja ha sido superada por otra transacción reciente. Monto actualizado.', 'Conflicto de Concurrencia (409)', 'warning');
+            mostrarBannerConcurrencia(`⚡ <strong>Tu puja coincidió con otra oferta reciente (Conflicto 409).</strong> La sala se ha sincronizado con la versión ${subastaSeleccionadaSala.version}. Puedes reintentar tu oferta con los valores actualizados.`);
+            mostrarToast(`Tu puja coincidió con otra oferta reciente. La sala se actualizó a la versión ${subastaSeleccionadaSala.version}. Puedes reintentar ahora.`, 'Conflicto de Concurrencia (409)', 'warning');
+        } else if (err.status === 0 || err.status >= 500) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => enviarPuja(event));
         } else {
-            mostrarToast(`No se pudo procesar la puja: ${err.message}`, 'Error de Operación', 'danger');
+            mostrarToast(`No se pudo procesar la puja: ${escaparHtml(err.mensaje || err.message)}`, 'Error de Operación', 'danger');
         }
     } finally {
         setBotonCargando('btn-realizar-puja', 'spinner-puja', 'text-puja', false);
@@ -1903,7 +2132,7 @@ async function actualizarBilleteraUI() {
                     ${tipoInfo.esPositivo ? '+' : '-'}$${m.monto.toLocaleString('es-AR')}
                 </td>
                 <td><small class="text-muted">${fechaStr}</small></td>
-                <td>${m.concepto || (m.subastaId ? `Subasta #${m.subastaId}` : 'Operación General')}</td>
+                <td>${escaparHtml(m.concepto || (m.subastaId ? `Subasta #${Number(m.subastaId)}` : 'Operación General'))}</td>
                 <td><i class="fa-solid fa-circle-check text-success me-1"></i> Asentado</td>
             `;
             tbody.appendChild(tr);
@@ -1938,14 +2167,13 @@ async function procesarCargaSaldoModal(event) {
 
     try {
         await fetchCargarSaldo(usuarioActual.id, monto);
-        mostrarToast(`¡Se han acreditado <strong>+$${monto.toLocaleString('es-AR')}</strong> libremente a la cuenta de ${usuarioActual.nombre}!`, 'Acreditación Exitosa', 'success');
+        mostrarToast(`¡Se han acreditado <strong>+$${monto.toLocaleString('es-AR')}</strong> libremente a la cuenta de ${escaparHtml(usuarioActual.nombre)}!`, 'Acreditación Exitosa', 'success');
 
         const modalElem = document.getElementById('modalCargarSaldo');
         const modal = bootstrap.Modal.getInstance(modalElem);
         if (modal) modal.hide();
 
         document.getElementById('form-cargar-saldo').reset();
-        usuarioActual.saldoInicial = (usuarioActual.saldoInicial || 0) + monto;
         await actualizarBilleteraUI();
         await renderizarSelectorPerfilesSemilla();
         await cargarLogsAuditoria();
@@ -1954,82 +2182,42 @@ async function procesarCargaSaldoModal(event) {
         }
 
     } catch (err) {
-        mostrarToast(`Error al cargar saldo: ${err.message}`, 'Error', 'danger');
+        if (err.status === 0 || err.status >= 500) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => procesarCargaSaldoModal(event));
+        } else {
+            mostrarToast(`Error al cargar saldo: ${escaparHtml(err.mensaje || err.message)}`, 'Error', 'danger');
+        }
     } finally {
         setBotonCargando('btn-modal-cargar-saldo', 'spinner-cargar', 'text-cargar', false);
     }
 }
 
-async function procesarRetencionManual(event) {
-    event.preventDefault();
-    const monto = parseFloat(document.getElementById('test-retener-monto').value);
-    const subastaId = parseInt(document.getElementById('test-retener-subastaId').value) || 1;
 
-    setBotonCargando('btn-test-retener', 'spinner-test-retener', 'text-test-retener', true, 'Reteniendo...');
-
-    try {
-        await fetchRetenerSaldo(usuarioActual.id, monto, subastaId);
-        mostrarToast(`Saldo de $${monto.toLocaleString('es-AR')} retenido preventivamente en Escrow.`, 'Retención Ejecutada', 'info');
-        await actualizarBilleteraUI();
-        await sincronizarSaldosDropdown();
-        if (subastaSeleccionadaSala) await validarPujaEnVivo();
-    } catch (e) {
-        if (e.status === 400 || e.status === 422 || (e.message && e.message.includes('saldo insuficiente'))) {
-            abrirModalSaldoInsuficiente(monto);
-        } else {
-            mostrarToast(e.message, 'Error', 'danger');
-        }
-    } finally {
-        setBotonCargando('btn-test-retener', 'spinner-test-retener', 'text-test-retener', false);
-    }
-}
-
-async function procesarLiberacionManual(event) {
-    event.preventDefault();
-    const monto = parseFloat(document.getElementById('test-liberar-monto').value);
-    const subastaId = parseInt(document.getElementById('test-liberar-subastaId').value) || 1;
-
-    setBotonCargando('btn-test-liberar', 'spinner-test-liberar', 'text-test-liberar', true, 'Liberando...');
-
-    try {
-        await fetchLiberarSaldo(usuarioActual.id, monto, subastaId);
-        mostrarToast(`Saldo de $${monto.toLocaleString('es-AR')} liberado de Escrow.`, 'Fondos Liberados', 'success');
-        await actualizarBilleteraUI();
-        await sincronizarSaldosDropdown();
-        if (subastaSeleccionadaSala) await validarPujaEnVivo();
-    } catch (e) {
-        mostrarToast(e.message, 'Error', 'danger');
-    } finally {
-        setBotonCargando('btn-test-liberar', 'spinner-test-liberar', 'text-test-liberar', false);
-    }
-}
 
 async function procesarCrearUsuario(event) {
     event.preventDefault();
     const nombre = document.getElementById('modal-usuario-nombre').value.trim();
     const email = document.getElementById('modal-usuario-email').value.trim();
+    const password = document.getElementById('modal-usuario-password')?.value || '';
 
-    if (!nombre || !email) {
-        mostrarToast('Complete el nombre y correo electrónico.', 'Campos Requeridos', 'warning');
+    if (!nombre || !email || !password) {
+        mostrarToast('Complete el nombre, correo electrónico y contraseña.', 'Campos Requeridos', 'warning');
+        return;
+    }
+
+    if (password.length < 4) {
+        mostrarToast('La contraseña debe tener al menos 4 caracteres.', 'Validación', 'warning');
         return;
     }
 
     setBotonCargando('btn-modal-usuario', 'spinner-usuario', 'text-usuario', true, '<i class="fa-solid fa-circle-notch fa-spin me-1"></i> Registrando...');
 
     try {
-        const res = await fetchCrearUsuario(nombre, email);
-        mostrarToast(res.mensaje || 'Usuario y billetera creados correctamente', 'Usuario Creado', 'success');
+        const res = await fetchCrearUsuario(nombre, email, password);
+        mostrarToast('Usuario y billetera creados correctamente', 'Usuario Creado', 'success');
 
-        const nuevoPerfil = {
-            id: res.usuarioId || Date.now(),
-            nombre: nombre,
-            email: email,
-            rol: 'Nuevo Usuario',
-            saldoInicial: 0
-        };
-
-        PERFILES_SEMILLA.push(nuevoPerfil);
-        await iniciarSesion(nuevoPerfil);
+        const loggedUser = await fetchLogin(email, password);
+        await iniciarSesion(loggedUser);
 
         const modalElem = document.getElementById('modalCrearUsuario');
         const modal = bootstrap.Modal.getInstance(modalElem);
@@ -2037,7 +2225,11 @@ async function procesarCrearUsuario(event) {
         document.getElementById('form-modal-usuario').reset();
 
     } catch (e) {
-        mostrarToast(`Error al crear usuario: ${e.message}`, 'Error', 'danger');
+        if (e.status === 0 || e.status >= 500) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => procesarCrearUsuario(event));
+        } else {
+            mostrarToast(`Error al crear usuario: ${escaparHtml(e.mensaje || e.message)}`, 'Error', 'danger');
+        }
     } finally {
         setBotonCargando('btn-modal-usuario', 'spinner-usuario', 'text-usuario', false);
     }
@@ -2053,186 +2245,242 @@ async function cargarMisActividades() {
 
     if (!contenedorPujas || !contenedorPublicaciones) return;
 
-    if (!subastasCache || subastasCache.length === 0) {
-        try {
-            subastasCache = await fetchObtenerSubastas();
-        } catch (e) {
-            console.warn("No se pudieron cargar subastas para Mis Actividades", e);
-        }
-    }
-
-    let misPujasCount = 0;
-    let misPublicacionesCount = 0;
-    let misGanadasCount = 0;
-
-    contenedorPujas.innerHTML = '';
-    contenedorPublicaciones.innerHTML = '';
-
-    subastasCache.forEach(sub => {
-        const subId = sub.id ?? sub.Id;
-        const subTitulo = sub.titulo ?? sub.Titulo ?? `Subasta #${subId}`;
-        const subImg = sub.urlImagen ?? sub.UrlImagen ?? 'assets/images/watch.png';
-        const subPrecioBase = sub.precioBase ?? sub.PrecioBase ?? 0;
-        const subEstado = determinarEstadoSubasta(sub);
-        const subVendedorId = sub.vendedorId ?? sub.VendedorId;
-        const pujas = sub.pujas ?? sub.Pujas ?? [];
-        const catId = sub.categoriaId ?? sub.CategoriaId;
-        const catNombre = categoriasCache.find(c => c.id == catId)?.nombre || 'General';
-
-        const haFinalizado = (subEstado === 'FINALIZADA' || subEstado === 'DESIERTA');
-        const pujaAbsolutaMax = obtenerPujaMaxima(sub);
-
-        // 1. Subastas en las que el usuario actual ha realizado ofertas
-        const misPujasEnSub = pujas.filter(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
-        if (misPujasEnSub.length > 0) {
-            misPujasCount += misPujasEnSub.length;
-            const miMayorPuja = Math.max(...misPujasEnSub.map(p => (p.monto ?? p.Monto)));
-            const esLider = (miMayorPuja === pujaAbsolutaMax);
-
-            if (haFinalizado && esLider) {
-                misGanadasCount++;
-            }
-
-            let badgeLiderazgoHtml = '';
-            let escrowInfoHtml = '';
-            let cardBorderClass = 'border';
-
-            if (haFinalizado) {
-                if (esLider) {
-                    cardBorderClass = 'border-success border-2';
-                    badgeLiderazgoHtml = `<span class="badge bg-success shadow-sm"><i class="fa-solid fa-crown me-1"></i>¡Subasta Ganada!</span>`;
-                    escrowInfoHtml = `<span class="text-success extra-small fw-bold"><i class="fa-solid fa-circle-check me-1"></i>Adjudicada por $${miMayorPuja.toLocaleString('es-AR')}</span>`;
-                } else {
-                    badgeLiderazgoHtml = `<span class="badge bg-secondary"><i class="fa-solid fa-flag-checkered me-1"></i>Finalizada</span>`;
-                    escrowInfoHtml = `<span class="text-muted extra-small"><i class="fa-solid fa-rotate-left text-secondary me-1"></i>Superada · Garantía liberada</span>`;
-                }
-            } else {
-                if (esLider) {
-                    cardBorderClass = 'border-success';
-                    badgeLiderazgoHtml = `<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-trophy me-1"></i>Vas ganando (Líder)</span>`;
-                    escrowInfoHtml = `<span class="text-warning-emphasis extra-small fw-semibold"><i class="fa-solid fa-shield-halved me-1 text-warning"></i>$${miMayorPuja.toLocaleString('es-AR')} retenidos en Escrow</span>`;
-                } else {
-                    cardBorderClass = 'border-danger-subtle';
-                    badgeLiderazgoHtml = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>Te superaron (Outbid)</span>`;
-                    escrowInfoHtml = `<span class="text-info extra-small fw-semibold"><i class="fa-solid fa-arrow-rotate-left me-1"></i>Garantía liberada ($${miMayorPuja.toLocaleString('es-AR')} disponibles)</span>`;
-                }
-            }
-
-            const col = document.createElement('div');
-            col.className = 'col-lg-6 col-12 mb-3';
-            col.innerHTML = `
-                <div class="card h-100 ${cardBorderClass} p-3 shadow-sm activity-card">
-                    <div class="d-flex gap-3">
-                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
-                        <div class="flex-grow-1 min-w-0">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
-                                <div class="flex-shrink-0">${badgeLiderazgoHtml}</div>
-                            </div>
-                            <div class="extra-small text-muted mb-2">
-                                <span class="badge bg-light text-dark border me-1">${catNombre}</span>
-                                <span>${misPujasEnSub.length} oferta${misPujasEnSub.length === 1 ? '' : 's'} tuya${misPujasEnSub.length === 1 ? '' : 's'} (${pujas.length} en total)</span>
-                            </div>
-                            <div class="bg-light p-2 rounded-2 border extra-small mb-2">
-                                <div class="d-flex justify-content-between">
-                                    <span class="text-muted">Tu mejor oferta:</span>
-                                    <span class="fw-bold text-primary-custom">$${miMayorPuja.toLocaleString('es-AR')}</span>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <span class="text-muted">Oferta líder actual:</span>
-                                    <span class="fw-bold ${esLider ? 'text-success' : 'text-danger'}">$${pujaAbsolutaMax.toLocaleString('es-AR')}</span>
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
-                                <div>${escrowInfoHtml}</div>
-                                <button class="btn ${!haFinalizado && !esLider ? 'btn-warning text-dark fw-bold' : 'btn-outline-primary-custom'} btn-sm px-3" onclick="abrirSalaEnVivo(${subId})">
-                                    ${!haFinalizado && !esLider ? '<i class="fa-solid fa-arrow-up me-1"></i>Pujar' : '<i class="fa-solid fa-gavel me-1"></i>Ver Sala'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            contenedorPujas.appendChild(col);
-        }
-
-        // 2. Publicaciones creadas por el usuario actual como vendedor
-        if (subVendedorId === usuarioActual.id) {
-            misPublicacionesCount++;
-            const colPub = document.createElement('div');
-            colPub.className = 'col-lg-6 col-12 mb-3';
-            colPub.innerHTML = `
-                <div class="card h-100 border p-3 shadow-sm activity-card">
-                    <div class="d-flex gap-3">
-                        <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
-                        <div class="flex-grow-1 min-w-0">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                                <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
-                                <span class="badge ${haFinalizado ? 'bg-secondary' : (subEstado === 'PROGRAMADA' ? 'bg-warning text-dark' : 'bg-primary-custom')}">${subEstado}</span>
-                            </div>
-                            <div class="extra-small text-muted mb-2">
-                                <span class="badge bg-light text-dark border me-1">${catNombre}</span>
-                                <span>${pujas.length} oferta${pujas.length === 1 ? '' : 's'} recibida${pujas.length === 1 ? '' : 's'}</span>
-                            </div>
-                            <div class="bg-light p-2 rounded-2 border extra-small mb-2">
-                                <div class="d-flex justify-content-between">
-                                    <span class="text-muted">Precio base:</span>
-                                    <span class="fw-semibold text-dark">$${subPrecioBase.toLocaleString('es-AR')}</span>
-                                </div>
-                                <div class="d-flex justify-content-between">
-                                    <span class="text-muted">Puja máxima actual:</span>
-                                    <span class="fw-bold text-success">$${pujaAbsolutaMax.toLocaleString('es-AR')}</span>
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
-                                <span class="extra-small text-muted">
-                                    ${pujas.length > 0 ? `<i class="fa-solid fa-users me-1 text-primary-custom"></i>${pujas.length} oferta(s)` : '<i class="fa-regular fa-clock me-1"></i>Sin ofertas aún'}
-                                </span>
-                                <button class="btn btn-outline-primary-custom btn-sm px-3" onclick="abrirSalaEnVivo(${subId})">
-                                    <i class="fa-solid fa-sliders me-1"></i>Administrar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            contenedorPublicaciones.appendChild(colPub);
-        }
-    });
-
-    if (contenedorPujas.children.length === 0) {
+    if (!usuarioActual || !usuarioActual.id) {
         contenedorPujas.innerHTML = `
             <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
-                <i class="fa-solid fa-gavel fa-2x mb-2 text-secondary opacity-50"></i>
-                <p class="mb-1 fw-bold">Sin ofertas registradas con ${usuarioActual.nombre}</p>
-                <p class="extra-small mb-3">Aún no has realizado pujas en las subastas disponibles.</p>
-                <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-catalogo').click()">
-                    <i class="fa-solid fa-compass me-1"></i>Explorar Catálogo
-                </button>
+                <i class="fa-solid fa-user-lock fa-2x mb-2 text-secondary opacity-50"></i>
+                <p class="mb-1 fw-bold">Sesión requerida</p>
+                <p class="extra-small mb-3">Inicia sesión para consultar tus participaciones.</p>
             </div>
         `;
-    }
-
-    if (contenedorPublicaciones.children.length === 0) {
         contenedorPublicaciones.innerHTML = `
             <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
-                <i class="fa-solid fa-store fa-2x mb-2 text-secondary opacity-50"></i>
-                <p class="mb-1 fw-bold">Sin publicaciones con ${usuarioActual.nombre}</p>
-                <p class="extra-small mb-3">No tienes artículos publicados a subasta como vendedor.</p>
-                <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-publicar').click()">
-                    <i class="fa-solid fa-plus me-1"></i>Publicar una Subasta
+                <i class="fa-solid fa-user-lock fa-2x mb-2 text-secondary opacity-50"></i>
+                <p class="mb-1 fw-bold">Sesión requerida</p>
+                <p class="extra-small mb-3">Inicia sesión para consultar tus publicaciones.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Estado de carga inicial
+    contenedorPujas.innerHTML = `
+        <div class="col-12 text-center py-5 text-muted">
+            <div class="spinner-border text-primary-custom mb-2" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="small mb-0">Cargando tus participaciones...</p>
+        </div>
+    `;
+    contenedorPublicaciones.innerHTML = `
+        <div class="col-12 text-center py-5 text-muted">
+            <div class="spinner-border text-primary-custom mb-2" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="small mb-0">Cargando tus publicaciones...</p>
+        </div>
+    `;
+
+    try {
+        const data = await fetchObtenerActividades(usuarioActual.id);
+        const participaciones = data?.participaciones ?? data?.Participaciones ?? [];
+        const publicaciones = data?.publicaciones ?? data?.Publicaciones ?? [];
+        const metricas = data?.metricas ?? data?.Metricas ?? {};
+
+        // Actualizar métricas numéricas desde el backend
+        const statPujas = document.getElementById('stat-total-pujas');
+        const statCreadas = document.getElementById('stat-subastas-creadas');
+        const statGanadas = document.getElementById('stat-subastas-ganadas');
+
+        if (statPujas) statPujas.textContent = metricas.totalPujas ?? metricas.TotalPujas ?? 0;
+        if (statCreadas) statCreadas.textContent = metricas.subastasPublicadas ?? metricas.SubastasPublicadas ?? 0;
+        if (statGanadas) statGanadas.textContent = metricas.subastasGanadas ?? metricas.SubastasGanadas ?? 0;
+
+        // Renderizar Participaciones
+        contenedorPujas.innerHTML = '';
+        if (participaciones.length === 0) {
+            contenedorPujas.innerHTML = `
+                <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
+                    <i class="fa-solid fa-gavel fa-2x mb-2 text-secondary opacity-50"></i>
+                    <p class="mb-1 fw-bold">Sin ofertas registradas con ${escaparHtml(usuarioActual.nombre)}</p>
+                    <p class="extra-small mb-3">Aún no has realizado pujas en las subastas disponibles.</p>
+                    <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-catalogo').click()">
+                        <i class="fa-solid fa-compass me-1"></i>Explorar Catálogo
+                    </button>
+                </div>
+            `;
+        } else {
+            participaciones.forEach(part => {
+                const subId = Number(part.subastaId ?? part.SubastaId);
+                const subTitulo = escaparHtml(part.titulo ?? part.Titulo ?? `Subasta #${subId}`);
+                const subImg = sanitizarUrlImagen(part.urlImagen ?? part.UrlImagen);
+                const catNombre = escaparHtml(part.categoriaNombre ?? part.CategoriaNombre ?? 'General');
+                const subEstado = part.estado ?? part.Estado ?? 'ACTIVA';
+                const miMayorPuja = part.miMejorOferta ?? part.MiMejorOferta ?? 0;
+                const ofertaLiderActual = part.ofertaLiderActual ?? part.OfertaLiderActual ?? 0;
+                const esLider = !!(part.esLider ?? part.EsLider);
+                const ganadorId = part.ganadorId ?? part.GanadorId;
+                const precioFinal = part.precioFinal ?? part.PrecioFinal ?? miMayorPuja;
+                const cantMisPujas = part.cantidadMisPujas ?? part.CantidadMisPujas ?? 0;
+                const cantTotalPujas = part.cantidadPujasTotal ?? part.CantidadPujasTotal ?? 0;
+
+                const haFinalizado = (subEstado === 'FINALIZADA' || subEstado === 'DESIERTA');
+                const esGanador = (haFinalizado && ganadorId === usuarioActual.id);
+
+                let badgeLiderazgoHtml = '';
+                let escrowInfoHtml = '';
+                let cardBorderClass = 'border';
+
+                if (haFinalizado) {
+                    if (esGanador) {
+                        cardBorderClass = 'border-success border-2';
+                        badgeLiderazgoHtml = `<span class="badge bg-success shadow-sm"><i class="fa-solid fa-crown me-1"></i>¡Subasta Ganada!</span>`;
+                        escrowInfoHtml = `<span class="text-success extra-small fw-bold"><i class="fa-solid fa-circle-check me-1"></i>Adjudicada por $${Number(precioFinal).toLocaleString('es-AR')}</span>`;
+                    } else {
+                        badgeLiderazgoHtml = `<span class="badge bg-secondary"><i class="fa-solid fa-flag-checkered me-1"></i>Finalizada</span>`;
+                        escrowInfoHtml = `<span class="text-muted extra-small"><i class="fa-solid fa-rotate-left text-secondary me-1"></i>Superada · Garantía liberada</span>`;
+                    }
+                } else {
+                    if (esLider) {
+                        cardBorderClass = 'border-success';
+                        badgeLiderazgoHtml = `<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-trophy me-1"></i>Vas ganando (Líder)</span>`;
+                        escrowInfoHtml = `<span class="text-warning-emphasis extra-small fw-semibold"><i class="fa-solid fa-shield-halved me-1 text-warning"></i>$${Number(miMayorPuja).toLocaleString('es-AR')} retenidos en Escrow</span>`;
+                    } else {
+                        cardBorderClass = 'border-danger-subtle';
+                        badgeLiderazgoHtml = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>Te superaron (Outbid)</span>`;
+                        escrowInfoHtml = `<span class="text-info extra-small fw-semibold"><i class="fa-solid fa-arrow-rotate-left me-1"></i>Garantía liberada ($${Number(miMayorPuja).toLocaleString('es-AR')} disponibles)</span>`;
+                    }
+                }
+
+                const col = document.createElement('div');
+                col.className = 'col-lg-6 col-12 mb-3';
+                col.innerHTML = `
+                    <div class="card h-100 ${cardBorderClass} p-3 shadow-sm activity-card">
+                        <div class="d-flex gap-3">
+                            <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                    <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
+                                    <div class="flex-shrink-0">${badgeLiderazgoHtml}</div>
+                                </div>
+                                <div class="extra-small text-muted mb-2">
+                                    <span class="badge bg-light text-dark border me-1">${catNombre}</span>
+                                    <span>${cantMisPujas} oferta${cantMisPujas === 1 ? '' : 's'} tuya${cantMisPujas === 1 ? '' : 's'} (${cantTotalPujas} en total)</span>
+                                </div>
+                                <div class="bg-light p-2 rounded-2 border extra-small mb-2">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Tu mejor oferta:</span>
+                                        <span class="fw-bold text-primary-custom">$${Number(miMayorPuja).toLocaleString('es-AR')}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Oferta líder actual:</span>
+                                        <span class="fw-bold ${esLider ? 'text-success' : 'text-danger'}">$${Number(ofertaLiderActual).toLocaleString('es-AR')}</span>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
+                                    <div>${escrowInfoHtml}</div>
+                                    <button class="btn ${!haFinalizado && !esLider ? 'btn-warning text-dark fw-bold' : 'btn-outline-primary-custom'} btn-sm px-3" onclick="abrirSalaEnVivo(${Number(subId)})">
+                                        ${!haFinalizado && !esLider ? '<i class="fa-solid fa-arrow-up me-1"></i>Pujar' : '<i class="fa-solid fa-gavel me-1"></i>Ver Sala'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                contenedorPujas.appendChild(col);
+            });
+        }
+
+        // Renderizar Publicaciones
+        contenedorPublicaciones.innerHTML = '';
+        if (publicaciones.length === 0) {
+            contenedorPublicaciones.innerHTML = `
+                <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
+                    <i class="fa-solid fa-store fa-2x mb-2 text-secondary opacity-50"></i>
+                    <p class="mb-1 fw-bold">Sin publicaciones con ${escaparHtml(usuarioActual.nombre)}</p>
+                    <p class="extra-small mb-3">No tienes artículos publicados a subasta como vendedor.</p>
+                    <button class="btn btn-primary-custom btn-sm" onclick="document.getElementById('tab-publicar').click()">
+                        <i class="fa-solid fa-plus me-1"></i>Publicar una Subasta
+                    </button>
+                </div>
+            `;
+        } else {
+            publicaciones.forEach(pub => {
+                const subId = Number(pub.subastaId ?? pub.SubastaId);
+                const subTitulo = escaparHtml(pub.titulo ?? pub.Titulo ?? `Subasta #${subId}`);
+                const subImg = sanitizarUrlImagen(pub.urlImagen ?? pub.UrlImagen);
+                const catNombre = escaparHtml(pub.categoriaNombre ?? pub.CategoriaNombre ?? 'General');
+                const subEstado = pub.estado ?? pub.Estado ?? 'ACTIVA';
+                const haFinalizado = (subEstado === 'FINALIZADA' || subEstado === 'DESIERTA');
+                const subPrecioBase = pub.precioBase ?? pub.PrecioBase ?? 0;
+                const ofertaLiderActual = pub.ofertaLiderActual ?? pub.OfertaLiderActual ?? subPrecioBase;
+                const cantPujas = pub.cantidadPujas ?? pub.CantidadPujas ?? 0;
+
+                const colPub = document.createElement('div');
+                colPub.className = 'col-lg-6 col-12 mb-3';
+                colPub.innerHTML = `
+                    <div class="card h-100 border p-3 shadow-sm activity-card">
+                        <div class="d-flex gap-3">
+                            <img src="${subImg}" alt="${subTitulo}" class="rounded-3 border object-fit-cover flex-shrink-0" style="width: 76px; height: 76px;" onerror="this.src='assets/images/watch.png'">
+                            <div class="flex-grow-1 min-w-0">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
+                                    <h6 class="fw-bold text-dark mb-0 text-truncate" title="${subTitulo}">${subTitulo}</h6>
+                                    <span class="badge ${haFinalizado ? 'bg-secondary' : (subEstado === 'PROGRAMADA' ? 'bg-warning text-dark' : 'bg-primary-custom')}">${subEstado}</span>
+                                </div>
+                                <div class="extra-small text-muted mb-2">
+                                    <span class="badge bg-light text-dark border me-1">${catNombre}</span>
+                                    <span>${cantPujas} oferta${cantPujas === 1 ? '' : 's'} recibida${cantPujas === 1 ? '' : 's'}</span>
+                                </div>
+                                <div class="bg-light p-2 rounded-2 border extra-small mb-2">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Precio base:</span>
+                                        <span class="fw-semibold text-dark">$${Number(subPrecioBase).toLocaleString('es-AR')}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Puja máxima actual:</span>
+                                        <span class="fw-bold text-success">$${Number(ofertaLiderActual).toLocaleString('es-AR')}</span>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
+                                    <span class="extra-small text-muted">
+                                        ${cantPujas > 0 ? `<i class="fa-solid fa-users me-1 text-primary-custom"></i>${cantPujas} oferta(s)` : '<i class="fa-regular fa-clock me-1"></i>Sin ofertas aún'}
+                                    </span>
+                                    <button class="btn btn-outline-primary-custom btn-sm px-3" onclick="abrirSalaEnVivo(${Number(subId)})">
+                                        <i class="fa-solid fa-sliders me-1"></i>Administrar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                contenedorPublicaciones.appendChild(colPub);
+            });
+        }
+    } catch (err) {
+        console.error("Error al cargar actividades del usuario:", err);
+        const mensajeError = err?.mensaje || err?.message || 'No se pudieron recuperar las actividades.';
+
+        contenedorPujas.innerHTML = `
+            <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
+                <i class="fa-solid fa-triangle-exclamation fa-2x mb-2 text-warning"></i>
+                <p class="mb-1 fw-bold text-dark">Error al cargar participaciones</p>
+                <p class="extra-small text-muted mb-3">${escaparHtml(mensajeError)}</p>
+                <button class="btn btn-outline-primary-custom btn-sm" onclick="cargarMisActividades()">
+                    <i class="fa-solid fa-rotate-right me-1"></i>Reintentar
+                </button>
+            </div>
+        `;
+        contenedorPublicaciones.innerHTML = `
+            <div class="col-12 text-center py-4 text-muted border rounded-3 bg-light">
+                <i class="fa-solid fa-triangle-exclamation fa-2x mb-2 text-warning"></i>
+                <p class="mb-1 fw-bold text-dark">Error al cargar publicaciones</p>
+                <p class="extra-small text-muted mb-3">${escaparHtml(mensajeError)}</p>
+                <button class="btn btn-outline-primary-custom btn-sm" onclick="cargarMisActividades()">
+                    <i class="fa-solid fa-rotate-right me-1"></i>Reintentar
                 </button>
             </div>
         `;
     }
-
-    const statPujas = document.getElementById('stat-total-pujas');
-    const statCreadas = document.getElementById('stat-subastas-creadas');
-    const statGanadas = document.getElementById('stat-subastas-ganadas');
-
-    if (statPujas) statPujas.textContent = misPujasCount;
-    if (statCreadas) statCreadas.textContent = misPublicacionesCount;
-    if (statGanadas) statGanadas.textContent = misGanadasCount;
 }
 
 /* ==========================================================================
@@ -2240,18 +2488,31 @@ async function cargarMisActividades() {
    ========================================================================== */
 
 async function abrirModalSaldoInsuficiente(montoRequerido) {
-    const billetera = await fetchObtenerBilletera(usuarioActual.id);
-    const faltante = Math.max(0, montoRequerido - billetera.saldoDisponible);
+    let saldoDisp = 0;
+    try {
+        const billetera = await fetchObtenerBilletera(usuarioActual.id);
+        saldoDisp = billetera ? (billetera.saldoDisponible ?? billetera.SaldoDisponible ?? 0) : 0;
+    } catch (_) {
+        saldoDisp = 0;
+    }
 
-    document.getElementById('error-saldo-disponible').textContent = `$${billetera.saldoDisponible.toLocaleString()}`;
-    document.getElementById('error-monto-requerido').textContent = `$${montoRequerido.toLocaleString()}`;
-    document.getElementById('error-monto-faltante').textContent = `$${faltante.toLocaleString()}`;
+    const faltante = Math.max(0, montoRequerido - saldoDisp);
+
+    const elDisp = document.getElementById('error-saldo-disponible');
+    if (elDisp) elDisp.textContent = `$${saldoDisp.toLocaleString('es-AR')}`;
+    const elReq = document.getElementById('error-monto-requerido');
+    if (elReq) elReq.textContent = `$${montoRequerido.toLocaleString('es-AR')}`;
+    const elFalt = document.getElementById('error-monto-faltante');
+    if (elFalt) elFalt.textContent = `$${faltante.toLocaleString('es-AR')}`;
     
-    document.getElementById('modal-cargar-monto').value = Math.ceil(faltante);
+    const inputCargar = document.getElementById('modal-cargar-monto');
+    if (inputCargar) inputCargar.value = Math.ceil(faltante > 0 ? faltante : 10000);
 
     const modalElem = document.getElementById('modalSaldoInsuficiente');
-    const modal = new bootstrap.Modal(modalElem);
-    modal.show();
+    if (modalElem) {
+        const modal = new bootstrap.Modal(modalElem);
+        modal.show();
+    }
 }
 
 function abrirModalConcurrenciaOptimista() {
@@ -2282,38 +2543,7 @@ function mostrarBannerConcurrencia(mensajeHtml) {
     }, 9000);
 }
 
-/** Función para probar desde DevTools la respuesta y recuperación frente a un 409 Conflict */
-async function simularColisionConcurrencia() {
-    if (!subastaSeleccionadaSala) {
-        mostrarToast('Primero selecciona una subasta en la Sala en Vivo.', 'DevTools', 'info');
-        document.getElementById('tab-sala')?.click();
-        return;
-    }
 
-    mostrarToast('Simulando colisión de versión concurrente (HTTP 409)...', 'DevTools', 'warning');
-    
-    // Simular oferta simultánea de otro postor
-    const anonNuevo = `Postor #${Math.floor(Math.random() * 900 + 100).toString(16).toUpperCase()}`;
-    const montoSimulado = obtenerPujaMaxima(subastaSeleccionadaSala) + 10000;
-    
-    if (!subastaSeleccionadaSala.pujas) subastaSeleccionadaSala.pujas = [];
-    subastaSeleccionadaSala.pujas.push({
-        id: Date.now(),
-        subastaId: subastaSeleccionadaSala.id,
-        usuarioId: 99,
-        monto: montoSimulado,
-        fechaCreacion: new Date().toISOString(),
-        postorAnonimo: anonNuevo
-    });
-    subastaSeleccionadaSala.version = (subastaSeleccionadaSala.version || 1) + 1;
-
-    actualizarMonitorPujasSala();
-    actualizarTarjetasCatalogo();
-    configurarBotonesPujaRapida(subastaSeleccionadaSala.incrementoMinimo || 5000);
-
-    mostrarBannerConcurrencia(`⚡ <strong>Tu puja ha sido superada por otra transacción reciente.</strong> La sala se actualizó con la oferta de ${anonNuevo} por $${montoSimulado.toLocaleString('es-AR')}.`);
-    mostrarToast('Conflicto 409 simulado. La sala se sincronizó automáticamente sin recargar.', 'Simulación Exitosa', 'warning');
-}
 
 async function testearConexionApiDevTools() {
     const devBadge = document.getElementById('devtools-api-status');
@@ -2330,7 +2560,7 @@ async function testearConexionApiDevTools() {
         mostrarToast(`Conexión exitosa a la API (${ApiClient.baseURL})`, 'DevTools Ping', 'success');
         updateApiConnectionStatus(true);
     } catch (e) {
-        mostrarToast(`Fallo al conectar: ${e.message}`, 'DevTools Ping Fallido', 'danger');
+        mostrarToast(`Fallo al conectar: ${escaparHtml(e.message)}`, 'DevTools Ping Fallido', 'danger');
         updateApiConnectionStatus(false);
     }
 }
@@ -2349,11 +2579,7 @@ function configurarEventosUI() {
     const formCargar = document.getElementById('form-cargar-saldo');
     if (formCargar) formCargar.addEventListener('submit', procesarCargaSaldoModal);
 
-    const formRetener = document.getElementById('form-test-retener');
-    if (formRetener) formRetener.addEventListener('submit', procesarRetencionManual);
 
-    const formLiberar = document.getElementById('form-test-liberar');
-    if (formLiberar) formLiberar.addEventListener('submit', procesarLiberacionManual);
 
     const formUsuario = document.getElementById('form-modal-usuario');
     if (formUsuario) formUsuario.addEventListener('submit', procesarCrearUsuario);
@@ -2413,21 +2639,43 @@ function configurarEventosUI() {
         tabEl.addEventListener('shown.bs.tab', async (event) => {
             const targetId = event.target.getAttribute('data-bs-target');
             if (targetId === '#content-catalogo') {
+                detenerPollingSala();
+                iniciarPollingCatalogo();
                 await aplicarFiltros();
             } else if (targetId === '#content-sala') {
+                detenerPollingCatalogo();
                 if (!subastaSeleccionadaSala && subastasCache.length > 0) {
                     await cargarSalaEnVivo(subastasCache[0].id);
+                } else if (subastaSeleccionadaSala) {
+                    iniciarPollingSala();
                 }
-            } else if (targetId === '#content-billetera') {
-                await actualizarBilleteraUI();
-            } else if (targetId === '#content-actividades') {
-                await cargarMisActividades();
-            } else if (targetId === '#content-auditoria') {
-                if (usuarioActual && usuarioActual.rol === 'ADMIN') {
-                    await cargarLogsAuditoria();
+            } else {
+                detenerPollingSala();
+                detenerPollingCatalogo();
+                if (targetId === '#content-billetera') {
+                    await actualizarBilleteraUI();
+                } else if (targetId === '#content-actividades') {
+                    await cargarMisActividades();
+                } else if (targetId === '#content-auditoria') {
+                    if (usuarioActual && usuarioActual.rol === 'ADMIN') {
+                        await cargarLogsAuditoria();
+                    }
                 }
             }
         });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            const tabSala = document.getElementById('content-sala');
+            if (tabSala && tabSala.classList.contains('active')) {
+                iniciarPollingSala();
+            }
+            const tabCat = document.getElementById('content-catalogo');
+            if (tabCat && tabCat.classList.contains('active')) {
+                iniciarPollingCatalogo();
+            }
+        }
     });
 
     const dropdownUserContainer = document.getElementById('dropdown-perfiles-semilla')?.closest('.dropdown');
@@ -2483,7 +2731,7 @@ function actualizarVisibilidadAuditoria() {
     }
 }
 
-function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info') {
+function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info', onRetry = null) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
@@ -2493,15 +2741,24 @@ function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info') {
     if (tipo === 'danger') bgHeader = 'bg-danger text-white';
     if (tipo === 'warning') bgHeader = 'bg-warning text-dark';
 
+    const retryBtnHtml = onRetry ? `
+        <div class="mt-2 pt-2 border-top text-end">
+            <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2 fw-semibold" id="${toastId}-retry-btn">
+                <i class="fa-solid fa-rotate-right me-1"></i> Reintentar
+            </button>
+        </div>
+    ` : '';
+
     const toastHtml = `
-        <div id="${toastId}" class="toast shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="4500">
+        <div id="${toastId}" class="toast shadow-lg" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="${onRetry ? '8000' : '4500'}">
             <div class="toast-header ${bgHeader}">
-                <strong class="me-auto"><i class="fa-solid fa-bell me-2"></i>${titulo}</strong>
-                <small class="text-white-50">Ahora</small>
-                <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
+                <strong class="me-auto"><i class="fa-solid fa-bell me-2"></i>${escaparHtml(titulo)}</strong>
+                <small class="${tipo === 'warning' ? 'text-dark-50' : 'text-white-50'}">Ahora</small>
+                <button type="button" class="btn-close ${tipo === 'warning' ? '' : 'btn-close-white'} ms-2" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body bg-white text-dark">
-                ${mensaje}
+                <div>${mensaje}</div>
+                ${retryBtnHtml}
             </div>
         </div>
     `;
@@ -2510,6 +2767,18 @@ function mostrarToast(mensaje, titulo = 'Notificación', tipo = 'info') {
     const toastElem = document.getElementById(toastId);
     const bsToast = new bootstrap.Toast(toastElem);
     bsToast.show();
+
+    if (onRetry) {
+        const retryBtn = document.getElementById(`${toastId}-retry-btn`);
+        if (retryBtn) {
+            retryBtn.addEventListener('click', async () => {
+                bsToast.hide();
+                try {
+                    await onRetry();
+                } catch (_) {}
+            });
+        }
+    }
 
     toastElem.addEventListener('hidden.bs.toast', () => {
         toastElem.remove();
@@ -2585,20 +2854,20 @@ function renderizarLogsAuditoriaFiltrados() {
 
     tabla.innerHTML = '';
     filtrados.forEach(log => {
-        const id = log.id ?? log.Id;
+        const id = Number(log.id ?? log.Id);
         const accion = log.accion ?? log.Accion ?? '';
         const detalle = log.detalle ?? log.Detalle ?? '';
         const usuarioId = log.usuarioId ?? log.UsuarioId;
         const fechaStr = log.fechaRegistro ?? log.FechaRegistro;
 
         let badgeInfo = getBadgeAuditoria(accion);
-        let usuarioTexto = usuarioId ? `<span class="badge bg-light text-dark border">Usuario #${usuarioId}</span>` : '<span class="badge bg-secondary text-white">Worker / Sistema</span>';
+        let usuarioTexto = usuarioId ? `<span class="badge bg-light text-dark border">Usuario #${Number(usuarioId)}</span>` : '<span class="badge bg-secondary text-white">Worker / Sistema</span>';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="font-monospace text-muted small fw-bold">#${id}</td>
             <td><span class="badge ${badgeInfo.badge}">${badgeInfo.label}</span></td>
-            <td class="small text-break">${detalle}</td>
+            <td class="small text-break">${escaparHtml(detalle)}</td>
             <td class="small">${usuarioTexto}</td>
             <td class="small text-nowrap font-monospace text-secondary">${formatFechaHoraCortaUTC3(fechaStr)}</td>
         `;
@@ -2608,20 +2877,27 @@ function renderizarLogsAuditoriaFiltrados() {
 
 function getBadgeAuditoria(accion) {
     switch (accion) {
-        case 'CAMBIO_ESTADO_SUBASTA':
-            return { badge: 'bg-primary text-white', label: '<i class="fa-solid fa-arrows-rotate me-1"></i> Cambio de Estado' };
-        case 'VENTA_REGISTRADA':
-            return { badge: 'bg-success text-white', label: '<i class="fa-solid fa-handshake me-1"></i> Venta / Liquidación' };
-        case 'EXTENSION_ANTI_SNIPING':
-            return { badge: 'bg-warning text-dark', label: '<i class="fa-solid fa-shield-cat me-1"></i> Anti-Sniping (+120s)' };
+        case 'PUJA_REGISTRADA':
+            return { badge: 'bg-primary-custom text-white', label: '<i class="fa-solid fa-gavel me-1"></i> Puja Registrada' };
         case 'PUJA_RECHAZADA':
             return { badge: 'bg-danger text-white', label: '<i class="fa-solid fa-ban me-1"></i> Puja Rechazada (Negocio)' };
         case 'PUJA_RECHAZADA_CONCURRENCIA':
             return { badge: 'bg-dark text-white', label: '<i class="fa-solid fa-triangle-exclamation me-1"></i> Conflicto Concurrencia (409)' };
+        case 'EXTENSION_ANTISNIPING':
+        case 'EXTENSION_ANTI_SNIPING':
+            return { badge: 'bg-warning text-dark', label: '<i class="fa-solid fa-shield-cat me-1"></i> Anti-Sniping (+120s)' };
+        case 'SUBASTA_CREADA':
+            return { badge: 'bg-info text-dark', label: '<i class="fa-solid fa-plus-circle me-1"></i> Subasta Creada' };
+        case 'CAMBIO_ESTADO_SUBASTA':
+            return { badge: 'bg-primary text-white', label: '<i class="fa-solid fa-arrows-rotate me-1"></i> Cambio de Estado' };
+        case 'VENTA_REGISTRADA':
+            return { badge: 'bg-success text-white', label: '<i class="fa-solid fa-handshake me-1"></i> Venta / Liquidación' };
         case 'ACREDITACION_MANUAL_SALDO':
             return { badge: 'bg-info text-dark', label: '<i class="fa-solid fa-wallet me-1"></i> Acreditación Manual' };
+        case 'FALLO_CIERRE_SUBASTA':
+            return { badge: 'bg-danger text-white', label: '<i class="fa-solid fa-triangle-exclamation me-1"></i> Fallo en Cierre' };
         default:
-            return { badge: 'bg-secondary text-white', label: accion };
+            return { badge: 'bg-secondary text-white', label: escaparHtml(accion) };
     }
 }
 
@@ -2630,7 +2906,7 @@ async function forzarEjecucionWorker() {
         mostrarToast('Invocando verificación del Background Worker...', 'Worker en Proceso', 'info');
         const res = await fetchProcesarSubastasVencidas();
         if (res) {
-            mostrarToast(`Worker finalizado. Activadas: ${res.subastasActivadas ?? 0}, Adjudicadas: ${res.subastasFinalizadas ?? 0}, Desiertas: ${res.subastasDesiertas ?? 0}`, 'Worker Ejecutado', 'success');
+            mostrarToast(`Worker finalizado. Activadas: ${res.activadas ?? res.Activadas ?? 0}, Adjudicadas: ${res.finalizadas ?? res.Finalizadas ?? 0}, Desiertas: ${res.desiertas ?? res.Desiertas ?? 0}`, 'Worker Ejecutado', 'success');
         } else {
             mostrarToast('Se ejecutó la verificación periódica de subastas.', 'Worker Ejecutado', 'info');
         }
@@ -2638,7 +2914,11 @@ async function forzarEjecucionWorker() {
         await cargarMisActividades();
         await cargarLogsAuditoria();
     } catch (e) {
-        mostrarToast('Error al forzar la ejecución del worker.', 'Error Worker', 'danger');
+        if (e && (e.status === 0 || e.status >= 500)) {
+            mostrarToast('Servidor no disponible.', 'Error de Conexión', 'danger', () => forzarEjecucionWorker());
+        } else {
+            mostrarToast(`Error al forzar la ejecución del worker: ${escaparHtml(e.mensaje || e.message || '')}`, 'Error Worker', 'danger');
+        }
     }
 }
 
@@ -2658,7 +2938,7 @@ let _perfilSeleccionadoParaLogin = null;
  * Llamado al hacer clic en una tarjeta de perfil del login.
  */
 function seleccionarPerfilParaLogin(perfilId) {
-    _perfilSeleccionadoParaLogin = PERFILES_SEMILLA.find(p => p.id === perfilId) || null;
+    _perfilSeleccionadoParaLogin = usuariosDisponibles.find(p => p.id === perfilId) || null;
     if (!_perfilSeleccionadoParaLogin) return;
 
     const box = document.getElementById('login-perfil-password-box');
@@ -2677,7 +2957,7 @@ function seleccionarPerfilParaLogin(perfilId) {
 }
 
 /**
- * Confirma el login del perfil seleccionado validando la contraseña (1234 para pruebas).
+ * Confirma el login del perfil seleccionado enviando la contraseña al backend.
  */
 async function confirmarLoginPerfil() {
     if (!_perfilSeleccionadoParaLogin) return;
@@ -2687,25 +2967,19 @@ async function confirmarLoginPerfil() {
     const errorText = document.getElementById('login-perfil-error-text');
     const pw = pwInput ? pwInput.value : '';
 
-    // Para los perfiles de prueba la contraseña universal es "1234" (o vacía para bypass directo)
-    if (pw !== '1234' && pw !== '') {
-        if (errorEl && errorText) {
-            errorText.textContent = 'Contraseña incorrecta. Los perfiles de prueba usan "1234".';
-            errorEl.classList.remove('d-none');
-        }
-        return;
-    }
+    if (errorEl) errorEl.classList.add('d-none');
 
     setBotonCargando('btn-login-perfil-confirmar', 'spinner-login-perfil', 'text-login-perfil', true,
         '<i class="fa-solid fa-circle-notch fa-spin me-2"></i> Ingresando...');
 
     try {
-        await iniciarSesion(_perfilSeleccionadoParaLogin);
+        const usuarioAutenticado = await fetchLogin(_perfilSeleccionadoParaLogin.email || _perfilSeleccionadoParaLogin.nombre, pw);
+        await iniciarSesion(usuarioAutenticado);
         _perfilSeleccionadoParaLogin = null;
         cancelarSeleccionPerfil();
     } catch (e) {
         if (errorEl && errorText) {
-            errorText.textContent = e.message || 'Error al iniciar sesión.';
+            errorText.textContent = e.mensaje || e.message || 'Credenciales incorrectas.';
             errorEl.classList.remove('d-none');
         }
     } finally {

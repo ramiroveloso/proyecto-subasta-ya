@@ -15,14 +15,42 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         public int UsuarioId { get; set; }
         public Usuario Usuario { get; set; } = null!;
 
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal SaldoTotal { get; set; } = 0;
+        private decimal _saldoTotal;
+        private decimal _saldoRetenido;
+        private decimal _saldoDisponible;
 
         [Column(TypeName = "decimal(18,2)")]
-        public decimal SaldoRetenido { get; set; } = 0;
+        public decimal SaldoTotal
+        {
+            get => _saldoTotal;
+            set
+            {
+                ValidarPrecisionSaldo(value, "El saldo total");
+                _saldoTotal = value;
+            }
+        }
 
         [Column(TypeName = "decimal(18,2)")]
-        public decimal SaldoDisponible { get; set; } = 0;
+        public decimal SaldoRetenido
+        {
+            get => _saldoRetenido;
+            set
+            {
+                ValidarPrecisionSaldo(value, "El saldo retenido");
+                _saldoRetenido = value;
+            }
+        }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal SaldoDisponible
+        {
+            get => _saldoDisponible;
+            set
+            {
+                ValidarPrecisionSaldo(value, "El saldo disponible");
+                _saldoDisponible = value;
+            }
+        }
 
         // Control de concurrencia optimista (Mandatorio)
         [ConcurrencyCheck]
@@ -30,11 +58,31 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         public ICollection<TransactionLedger> Movimientos { get; set; } = new List<TransactionLedger>();
 
+        public static void ValidarPrecisionSaldo(decimal saldo, string nombreCampo = "El saldo")
+        {
+            if (saldo < 0)
+                throw new DominioException($"{nombreCampo} no puede ser negativo.");
+
+            if (decimal.Round(saldo, 2) != saldo)
+                throw new DominioException($"{nombreCampo} no puede tener más de dos decimales.");
+        }
+
+        public static void ValidarMonto(decimal monto, string operacion = "monto", decimal limiteMaximo = 100_000_000m)
+        {
+            if (monto <= 0)
+                throw new DominioException($"El {operacion} debe ser mayor a cero.");
+
+            if (decimal.Round(monto, 2) != monto)
+                throw new DominioException($"El {operacion} no puede tener más de dos decimales.");
+
+            if (monto > limiteMaximo)
+                throw new DominioException($"El {operacion} no puede superar el límite permitido de ${limiteMaximo:N2}.");
+        }
+
         // Lógica de negocio encapsulada con control de invariantes y OCC
         public void CargarSaldo(decimal monto)
         {
-            if (monto <= 0)
-                throw new DominioException("El monto a cargar debe ser mayor a cero.");
+            ValidarMonto(monto, "monto a cargar");
 
             SaldoTotal += monto;
             SaldoDisponible += monto;
@@ -43,8 +91,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         public void RetenerSaldo(decimal monto)
         {
-            if (monto <= 0)
-                throw new DominioException("El monto a retener debe ser mayor a cero.");
+            ValidarMonto(monto, "monto a retener");
 
             if (SaldoDisponible < monto)
                 throw new DominioException($"Fondos insuficientes. Saldo disponible actual: ${SaldoDisponible:N2}, monto requerido para retención: ${monto:N2}.");
@@ -56,8 +103,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         public void LiberarSaldo(decimal monto)
         {
-            if (monto <= 0)
-                throw new DominioException("El monto a liberar debe ser mayor a cero.");
+            ValidarMonto(monto, "monto a liberar");
 
             if (SaldoRetenido < monto)
                 throw new DominioException($"Inconsistencia financiera: No existe retención previa suficiente para liberar este saldo. Saldo retenido actual: ${SaldoRetenido:N2}, monto solicitado a liberar: ${monto:N2}.");
@@ -69,8 +115,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         public void DebitarRetencion(decimal monto)
         {
-            if (monto <= 0)
-                throw new DominioException("El monto a debitar debe ser mayor a cero.");
+            ValidarMonto(monto, "monto a debitar");
 
             if (SaldoRetenido < monto)
                 throw new DominioException($"Inconsistencia financiera: Saldo retenido insuficiente para debitar liquidación. Retenido actual: ${SaldoRetenido:N2}, débito solicitado: ${monto:N2}.");
@@ -82,8 +127,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
 
         public void AcreditarCobro(decimal monto)
         {
-            if (monto <= 0)
-                throw new DominioException("El monto a acreditar debe ser mayor a cero.");
+            ValidarMonto(monto, "monto a acreditar");
 
             SaldoTotal += monto;
             SaldoDisponible += monto;

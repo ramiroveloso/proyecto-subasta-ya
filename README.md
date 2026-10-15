@@ -1,234 +1,134 @@
+# SubastaYa - Plataforma de Subastas en Vivo
 
-# SubastaYa 
-
-Sistema de subastas en línea desarrollado bajo los principios de **Arquitectura Limpia (Clean Architecture)** y **Entity Framework Core Code-First**, implementado como proyecto de integración tecnológica.
+Sistema de subastas en tiempo real desarrollado bajo los principios de **Arquitectura Limpia (Clean Architecture)** en **.NET 8** con **Entity Framework Core (Code-First / MySQL)** y un patrón **CQRS custom** (Commands y Queries con Handlers concretos, sin dependencias a MediatR).
 
 ---
 
 ## 📋 Requisitos Previos
 
 Asegúrate de contar con las siguientes herramientas instaladas en tu entorno de desarrollo:
-* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) o superior.
-* [MySQL Server](https://dev.mysql.com/downloads/mysql/) configurado y corriendo localmente.
+* **[.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)** o superior.
+* **[MySQL Server 8.0+](https://dev.mysql.com/downloads/mysql/)** configurado y activo en el puerto 3306 (o el configurado en la cadena).
 
 ---
 
-## ⚙️ Configuración Inicial
+## ⚙️ Configuración de la Cadena de Conexión
 
-1. **Clonar el repositorio:**
-   ```bash
-   git clone <url-del-repositorio>
-   cd proyecto-subasta-ya
+Para evitar exponer credenciales en archivos versionados, `PROYECTO_SUBASTA.Api/appsettings.json` contiene únicamente una plantilla de ejemplo con `Pwd=CAMBIAR;`. Configura tu cadena de conexión real mediante **User Secrets** (recomendado en desarrollo) o variable de entorno:
 
-```
-
-2. **Configurar la cadena de conexión:**
-Abre el archivo `appsettings.json` ubicado en el proyecto `PROYECTO_SUBASTA.Api` y actualiza los parámetros de acceso (`Server`, `Database`, `User`, `Password`) en la sección de conexiones:
-```json
-"ConnectionStrings": {
-  "DefaultConnection": "Server=localhost;Database=subastadb;Uid=tu_usuario;Pwd=tu_contraseña;"
-}
-
-```
-
-
-
----
-
-## 🗄️ Base de datos y Migraciones
-
-El sistema requiere la creación previa de la base de datos y la aplicación de migraciones para poblar los registros semilla obligatorios (usuarios, billeteras, categorías y subastas de prueba).
-
-Desde la raíz de la solución, ejecuta los siguientes comandos:
-
+### Opción 1: User Secrets de .NET (Recomendada en desarrollo local)
+Desde la raíz del repositorio, ejecuta:
 ```bash
-# 1. Generar la migración inicial (si no existiera en el repositorio)
-dotnet ef migrations add InitialCreate --project PROYECTO_SUBASTA.Infrastructure --startup-project PROYECTO_SUBASTA.Api
-
-# 2. Aplicar las migraciones e impactar la base de datos MySQL
-dotnet ef database update --project PROYECTO_SUBASTA.Infrastructure --startup-project PROYECTO_SUBASTA.Api
-
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=127.0.0.1;Port=3306;Database=SubastaYaDb;Uid=root;Pwd=1123677295;" --project PROYECTO_SUBASTA.Api
 ```
+
+### Opción 2: Variable de entorno
+* **En Windows (PowerShell):**
+  ```powershell
+  $env:ConnectionStrings__DefaultConnection="Server=127.0.0.1;Port=3306;Database=SubastaYaDb;Uid=root;Pwd=TU_PASSWORD;"
+  ```
+* **En Linux / macOS (Bash):**
+  ```bash
+  export ConnectionStrings__DefaultConnection="Server=127.0.0.1;Port=3306;Database=SubastaYaDb;Uid=root;Pwd=TU_PASSWORD;"
+  ```
 
 ---
 
-## ▶️ Ejecución de la Aplicación
+## 🗄️ Migraciones y Seed Idempotente en Arranque
 
-Para poner en marcha el servidor backend (API):
+El sistema cuenta con inicialización automática y resiliente al iniciar la API (`DatabaseInitializer`):
+1. **Migraciones automáticas:** En cada arranque se invoca `Database.MigrateAsync()`, aplicando cualquier migración pendiente de Entity Framework Core sobre la base de datos MySQL (incluyendo esquemas, índices únicos, FKs y triggers de inmutabilidad de auditoría).
+2. **Seed idempotente:** Solo si la base de datos no contiene usuarios (`!await ctx.Usuarios.AnyAsync()`), se insertan automáticamente los perfiles demo con fechas relativas a UTC, subastas en diferentes estados, balances contables coherentes entre billetera y libro mayor (ledger) y registros de auditoría. Si la base ya contiene datos, el seed no se repite ni altera saldos existentes.
 
+No se requiere ejecutar manualmente comandos de `dotnet ef database update` para iniciar.
+
+---
+
+## ▶️ Ejecución del Proyecto
+
+### 1. Iniciar la API y el BackgroundWorker
+Para iniciar el servidor backend:
 ```bash
 dotnet run --project PROYECTO_SUBASTA.Api
-
 ```
+El servicio de segundo plano (`SubastaBackgroundWorker`) está registrado como un `IHostedService` dentro del mismo proceso de la API. Se ejecuta en ciclos periódicos evaluando de forma concurrente y atómica la activación de subastas programadas y el cierre/liquidación de subastas vencidas.
 
-* **Documentación Interactiva (Swagger):** Una vez iniciado el servidor, copia la URL que arroja la consola (ej. `https://localhost:XXXXX`) y añade `/swagger` para probar los endpoints directamente.
-* **Panel Web (Frontend Estático):** Abre el archivo `index.html` en tu navegador para interactuar con la interfaz de control local conectada al backend.
-
+### 2. Documentación Interactiva (Swagger / OpenAPI)
+Con la API en ejecución, accede en tu navegador a:
 ```
-
+http://localhost:<puerto>/swagger
 ```
-Aquí tienes una documentación técnica estructurada y lista para incluir en tu memoria de proyecto o repositorio, detallando la metodología, las herramientas y el script utilizado para verificar la **Concurrencia Optimista**.
+Swagger queda habilitado por defecto según la configuración en `appsettings.json` (`"Swagger": { "Enabled": true }`).
 
----
+### 3. Frontend Web Corporativo
+La API sirve los archivos estáticos del frontend directamente desde `PROYECTO_SUBASTA.Api/Frontend`:
+* Accede desde el navegador a la raíz `http://localhost:<puerto>/` o `http://localhost:<puerto>/index.html`.
+* La interfaz interactúa en tiempo real con los endpoints REST del backend (sin mocks ni datos simulados), reflejando la concurrencia optimista, extensiones anti-sniping y saldos retenidos en Escrow.
 
-# Documentación Técnica: Pruebas de Concurrencia Optimista
-
-## 1. Introducción y Metodología
-
-Para garantizar la integridad de los datos en un escenario de múltiples usuarios intentando ofertar sobre la misma subasta en el mismo instante, se implementó un mecanismo de **Control de Concurrencia Optimista (Optimistic Concurrency Control - OCC)**.
-
-La metodología se basa en:
-
-* **Uso de un Token de Concurrencia (`Version`)**: Cada entidad `Subasta` cuenta con una propiedad numérica de versión que se incrementa en cada modificación exitosa.
-* **Validación de Estado**: Cuando un cliente envía una puja, adjunta la versión que tenía la subasta al momento de cargar la vista.
-* **Detección de Colisiones**: Si dos solicitudes llegan de forma concurrente, la primera que procesa la base de datos actualiza el registro y eleva la versión. La segunda solicitud, al intentar guardar con una versión ya desactualizada, genera una excepción de concurrencia en Entity Framework Core, la cual es interceptada para evitar sobrescrituras y retornar un **HTTP 409 Conflict**.
-
----
-
-## 2. Herramientas Utilizadas
-
-* **Backend**: .NET API bajo Clean Architecture y Entity Framework Core.
-* **Base de Datos**: MySQL gestionada mediante MySQL Workbench para la verificación de esquemas y registros.
-* **Entorno de Pruebas Automatizadas**: Node.js (utilizando la API nativa `fetch` y `Promise.all` para simular solicitudes en paralelo estricto).
-
----
-
-## 3. Pasos para la Ejecución de la Prueba
-
-1. **Verificación de Versión Base**: Consultar la tabla `subastas` en MySQL Workbench para identificar el valor actual de la columna `Version` para una subasta específica (por ejemplo, `Version: 3`).
-2. **Configuración del Payload**: Preparar un script automatizado que envíe dos solicitudes HTTP `POST` simultáneas al endpoint de pujas, ambas con el mismo número de versión inicial.
-3. **Ejecución Simultánea**: Disparar las peticiones en paralelo mediante el motor de Node.js para eliminar la latencia e interferencia del factor humano.
-4. **Validación de Resultados**: Comprobar que una de las peticiones sea procesada exitosamente (**HTTP 200**) y la otra colisione de inmediato (**HTTP 409**).
-
----
-
-## 4. Script de Prueba Automatizada (`test-concurrencia.js`)
-
-El siguiente script en Node.js fue utilizado para simular la colisión concurrente de dos pujas enviadas exactamente al mismo tiempo:
-
-```javascript
-// Desactiva temporalmente la validación de certificados SSL autofirmados en entorno de desarrollo local
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-const url = 'https://localhost:65102/api/Subastas/1/pujas';
-
-const payload = {
-    usuarioId: 1,
-    monto: 135000,
-    version: 3 // Versión exacta esperada según el estado actual en la Base de Datos
-};
-
-async function enviarPuja(id) {
-    try {
-        const inicio = performance.now();
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        // Lectura de la respuesta en texto para manejar tanto JSON como mensajes planos
-        const text = await response.text();
-        let data;
-        try {
-            data = text ? JSON.parse(text) : text;
-        } catch {
-            data = text;
-        }
-
-        const tiempo = (performance.now() - inicio).toFixed(2);
-        console.log(`[Petición ${id}] -> Status HTTP: ${response.status} (${tiempo}ms)`, data);
-    } catch (error) {
-        console.error(`[Petición ${id}] Error de red:`, error.message);
-    }
-}
-
-console.log("--- LANZANDO PUJAS CONCURRENTES ---");
-// Promise.all ejecuta ambas solicitudes en paralelo estricto dentro del event loop
-Promise.all([
-    enviarPuja(1),
-    enviarPuja(2)
-]);
-
+### 4. Pruebas Automatizadas
+Para ejecutar la suite completa de pruebas unitarias y de integración:
+```bash
+dotnet test
 ```
 
 ---
 
-## 5. Resultados Obtenidos
+## 👥 Usuarios Demo y Credenciales
 
-Al ejecutar el script en la terminal, se obtuvo la siguiente traza de respuestas:
+El sistema cuenta con 4 usuarios sembrados automáticamente durante el primer arranque con la contraseña demo: **`1234`**
 
-* **[Petición 1] -> Status HTTP: 409**
-* *Respuesta*: `{ mensaje: 'Conflicto de concurrencia (409): La subasta fue modificada por otro usuario en simultáneo. Intente nuevamente.' }`
-
-
-* **[Petición 2] -> Status HTTP: 200**
-* *Respuesta*: `{ mensaje: 'Puja registrada con éxito y saldo retenido en Escrow.' }`
-
-
-
-**Conclusión de la prueba**: El sistema responde correctamente ante situaciones de alta concurrencia, protegiendo la regla de negocio y asegurando que ninguna puja sobreescriba de manera silenciosa los cambios de otro usuario.
-
-¡Excelente iniciativa! Documentar el proceso de despliegue en el `README.md` después de hacer el merge a `main` le dará un valor agregado enorme al proyecto frente al docente, demostrando un enfoque profesional de ingeniería de software DevOps.
-
-Aquí tienes una propuesta completa y redactada con terminología técnica precisa para que puedas copiar, adaptar y pegar directamente en tu archivo `README.md`:
+| ID | Nombre | Email / Usuario | Contraseña | Rol y Balance Inicial |
+|:---|:---|:---|:---|:---|
+| **1** | Vendedor Test | `vendedor@test.com` | `1234` | Vendedor de artículos demo. Saldo: $25.000 |
+| **2** | Comprador Líder | `comprador1@test.com` | `1234` | Postor líder en Subasta 1. Saldo disponible: $80.000 / Retenido: $45.000 |
+| **3** | Comprador Habilitado | `comprador2@test.com` | `1234` | Postor con fondos suficientes para pujar. Saldo disponible: $200.000 |
+| **4** | Usuario Sin Fondos | `sinfondos@test.com` | `1234` | Postor sin saldo ($0) para validar rechazos de oferta |
 
 ---
 
-## 🚀 Despliegue en la Nube (Cloud Deployment)
+## 🔄 Reiniciar los Datos Demo
 
-La arquitectura de **SubastaYa** se encuentra desplegada en un entorno cloud híbrido y desacoplado, separando la infraestructura del Backend, el Frontend y la Base de Datos para garantizar alta disponibilidad y rendimiento:
+El seed solo corre sobre una base de datos sin usuarios (`!await ctx.Usuarios.AnyAsync()`) y sus fechas son relativas al momento de ejecución (por ejemplo, la subasta crítica configurada a +90 segundos caduca transcurrido ese tiempo). Por lo tanto, para repetir los escenarios de prueba desde el estado inicial es necesario recrear la base local y reiniciar la API:
 
-* **Backend (API REST ASP.NET Core):** Alojado en **Render** mediante un contenedor Docker optimizado.
-* **Frontend (SPA - HTML/JS/CSS):** Distribuido a través de la CDN global de **Vercel**.
-* **Base de datos Relacional (MySQL):** Gestionada en el servicio cloud administrado de **Aiven**.
-
----
-
-### 1. Configuración y Despliegue del Backend (Render + Docker)
-
-Para empaquetar y desplegar la API desarrollada en ASP.NET Core bajo Clean Architecture, se implementó un archivo **`Dockerfile`** en la raíz del repositorio. Este contenedor compila la solución y expone el servicio en el puerto correspondiente:
-
-1. **Creación del Web Service en Render:**
-* Se conectó el repositorio de GitHub seleccionando la rama de producción.
-* Se configuró el entorno como **Docker** (Render detecta automáticamente el `Dockerfile` raíz).
-* El comando de inicio (*Start Command*) se dejó en blanco, ya que el contenedor ejecuta nativamente el `ENTRYPOINT` apuntando a `PROYECTO_SUBASTA.Api.dll`.
-
-
-2. **Variables de Entorno configuradas en Render:**
-* `ASPNETCORE_ENVIRONMENT`: `Production`
-* `ConnectionStrings__DefaultConnection`: Cadena de conexión segura hacia la base de datos MySQL en Aiven (con `SslMode=Required`).
-
-
+1. Eliminar la base de datos de desarrollo (solo en entornos locales):
+```bash
+dotnet ef database drop -f --project PROYECTO_SUBASTA.Infrastructure --startup-project PROYECTO_SUBASTA.Api
+```
+2. Reiniciar la API (aplicará automáticamente las migraciones y volverá a sembrar el seed completo con fechas frescas):
+```bash
+dotnet run --project PROYECTO_SUBASTA.Api
+```
 
 ---
 
-### 2. Configuración y Despliegue del Frontend (Vercel)
+## 🏗️ Estructura de Capas (Clean Architecture)
 
-La interfaz de usuario basada en Single Page Application (SPA) se configuró para consumir los endpoints públicos de la API en la nube:
-
-1. **Despliegue estático:**
-* Conectado directamente al repositorio en Vercel, optimizando la compilación de archivos estáticos.
-
-
-2. **Integración con la API:**
-* Se ajustó la capa de servicios (`api.js`) para apuntar las peticiones HTTP directamente a la URL pública del backend en Render, permitiendo la comunicación segura mediante HTTPS de punta a punta.
-
-
-
----
-
-### 3. Conectividad y Base de Datos (Aiven MySQL)
-
-* **Servidor:** Instancia MySQL gestionada en la nube de Aiven con cifrado SSL obligatorio (`SslMode=Required`).
-* **Migraciones:** Aplicadas mediante Entity Framework Core utilizando migraciones estructuradas para poblar esquemas, catálogos y datos iniciales de prueba (incluyendo los perfiles con rol `ADMIN`).
-
----
-
-### 🔗 Enlaces de Acceso Producción
-
-* **Interfaz Web (Frontend en Vercel):** [https://ramiroveloso-proyecto-subasta-ya.vercel.app/]
-* **API REST / Documentación (Backend en Render):** [https://proyecto-subasta-ya.onrender.com]
-
----
-
+```
+proyecto-subasta-ya/
+│
+├── PROYECTO_SUBASTA.Domain/
+│   ├── Entities/             # Entidades de dominio ricas (Subasta, Billetera, Puja, TransactionLedger, Usuario, Categoria, LogAuditoria)
+│   └── Exceptions/           # Excepciones de negocio y dominio (DominioException)
+│
+├── PROYECTO_SUBASTA.Application/
+│   ├── Commands/             # Commands y CommandHandlers (Subastas, Billeteras, Categorías, Usuarios)
+│   ├── Queries/              # Queries y QueryHandlers (Subastas, Billeteras, Categorías, Auditoría, Usuarios)
+│   ├── DTOs/                 # Contratos de transferencia de datos y respuestas HTTP
+│   ├── Mappers/              # Mapeadores estáticos centralizados (SubastaMapper, LedgerMapper)
+│   ├── Repositories/         # Interfaces de repositorios e IUnitOfWork (desacopladas de EF Core)
+│   └── Validators/           # Validaciones de precisión monetaria y límites permitidos
+│
+├── PROYECTO_SUBASTA.Infrastructure/
+│   ├── Data/                 # SubastaDbContext, DatabaseInitializer y configuración de entidades
+│   ├── Migrations/           # Migraciones EF Core versionadas
+│   ├── Repositories/         # Implementación de repositorios sobre MySQL y UnitOfWork con control de concurrencia
+│   └── Services/             # Servicios de infraestructura (AuditoriaService inmutable)
+│
+├── PROYECTO_SUBASTA.Api/
+│   ├── Controllers/          # Controladores REST delegadores (sin lógica de negocio)
+│   ├── Middlewares/          # ExceptionMiddleware centralizado para mapeo de errores consistentes y auditoría
+│   ├── Workers/              # SubastaBackgroundWorker para cierre y activación automática
+│   └── Frontend/             # SPA corporativa en HTML5, CSS3 responsive y Vanilla JS
+│
+└── PROYECTO_SUBASTA.Domain.Tests/ # Suite de pruebas automatizadas (xUnit)
+```

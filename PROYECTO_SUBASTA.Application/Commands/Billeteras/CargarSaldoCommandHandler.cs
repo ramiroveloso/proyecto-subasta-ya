@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using PROYECTO_SUBASTA.Application.Constants;
+using PROYECTO_SUBASTA.Application.DTOs;
 using PROYECTO_SUBASTA.Application.Exceptions;
+using PROYECTO_SUBASTA.Application.Mappers;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Application.UseCases;
 using PROYECTO_SUBASTA.Domain.Entities;
@@ -34,9 +37,15 @@ namespace PROYECTO_SUBASTA.Application.Commands.Billeteras
             _auditoriaService = auditoriaService ?? throw new ArgumentNullException(nameof(auditoriaService));
         }
 
-        public async Task<bool> HandleAsync(CargarSaldoCommand command, CancellationToken cancellationToken = default)
+        public async Task<MovimientoLedgerDto> HandleAsync(CargarSaldoCommand command, CancellationToken cancellationToken = default)
         {
-            if (command == null || command.Monto <= 0)
+            if (command == null)
+                throw new ArgumentNullException(nameof(command));
+
+            if (command.UsuarioId <= 0)
+                throw new ReglaNegocioException("Debe especificar un usuario válido.");
+
+            if (command.Monto <= 0)
                 throw new ReglaNegocioException("El monto a cargar debe ser mayor a cero.");
 
             await _unitOfWork.BeginTransactionAsync(cancellationToken);
@@ -59,13 +68,14 @@ namespace PROYECTO_SUBASTA.Application.Commands.Billeteras
                 await _ledgerRepository.AddAsync(transaccion);
 
                 await _auditoriaService.RegistrarAsync(
-                    "ACREDITACION_MANUAL_SALDO",
+                    AuditoriaAcciones.ACREDITACION_MANUAL_SALDO,
                     $"Acreditación de saldo de ${command.Monto:N2} en la billetera de Usuario #{command.UsuarioId}. Saldo resultante: ${billetera.SaldoTotal:N2}.",
                     command.UsuarioId
                 );
 
                 await _unitOfWork.CommitTransactionAsync(cancellationToken);
-                return true;
+
+                return LedgerMapper.MapearADto(transaccion);
             }
             catch
             {

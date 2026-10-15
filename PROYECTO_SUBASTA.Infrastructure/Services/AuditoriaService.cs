@@ -34,31 +34,24 @@ namespace PROYECTO_SUBASTA.Infrastructure.Services
         /// </summary>
         public async Task RegistrarAsync(string accion, string detalle, int? usuarioId = null)
         {
-            try
+            var log = new LogAuditoria
             {
-                var log = new LogAuditoria
-                {
-                    Accion = accion,
-                    Detalle = detalle,
-                    UsuarioId = usuarioId,
-                    FechaRegistro = DateTime.UtcNow
-                };
+                Accion = accion,
+                Detalle = detalle,
+                UsuarioId = usuarioId,
+                FechaRegistro = DateTime.UtcNow
+            };
 
-                _context.LogsAuditoria.Add(log);
+            _context.LogsAuditoria.Add(log);
 
-                // Si NO hay una transacción activa, se persiste inmediatamente.
-                // Si HAY una transacción activa, se guardará y confirmará junto con la transacción principal.
-                if (_context.Database.CurrentTransaction == null)
-                {
-                    await _context.SaveChangesAsync();
-                }
-
-                _logger.LogInformation("[AUDITORIA-TRANSACCIONAL] {Accion} (UsuarioId: {UsuarioId}): {Detalle}", accion, usuarioId, detalle);
-            }
-            catch (Exception ex)
+            // Si NO hay una transacción activa, se persiste inmediatamente.
+            // Si HAY una transacción activa, se guardará y confirmará junto con la transacción principal.
+            if (_context.Database.CurrentTransaction == null)
             {
-                _logger.LogError(ex, "Error al registrar evento de auditoría transaccional: {Accion}", accion);
+                await _context.SaveChangesAsync();
             }
+
+            _logger.LogInformation("[AUDITORIA-TRANSACCIONAL] {Accion} (UsuarioId: {UsuarioId}): {Detalle}", accion, usuarioId, detalle);
         }
 
         /// <summary>
@@ -97,6 +90,16 @@ namespace PROYECTO_SUBASTA.Infrastructure.Services
                 .OrderByDescending(l => l.FechaRegistro)
                 .Take(limite)
                 .ToListAsync();
+        }
+
+        public async Task<bool> ExisteEventoRecienteAsync(string accion, string fragmentoDetalle, TimeSpan ventana)
+        {
+            var desdeUtc = DateTime.UtcNow.Subtract(ventana);
+            return await _context.LogsAuditoria
+                .AsNoTracking()
+                .AnyAsync(l => l.Accion == accion 
+                            && l.FechaRegistro >= desdeUtc 
+                            && l.Detalle.Contains(fragmentoDetalle));
         }
     }
 }
