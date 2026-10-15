@@ -65,12 +65,6 @@ La API sirve los archivos estáticos del frontend directamente desde `PROYECTO_S
 * Accede desde el navegador a la raíz `http://localhost:<puerto>/` o `http://localhost:<puerto>/index.html`.
 * La interfaz interactúa en tiempo real con los endpoints REST del backend (sin mocks ni datos simulados), reflejando la concurrencia optimista, extensiones anti-sniping y saldos retenidos en Escrow.
 
-### 4. Pruebas Automatizadas
-Para ejecutar la suite completa de pruebas unitarias y de integración:
-```bash
-dotnet test
-```
-
 ---
 
 ## 👥 Usuarios Demo y Credenciales
@@ -124,11 +118,9 @@ proyecto-subasta-ya/
 │   ├── Repositories/         # Implementación de repositorios sobre MySQL y UnitOfWork con control de concurrencia
 │   └── Services/             # Servicios de infraestructura (AuditoriaService inmutable)
 │
-├── PROYECTO_SUBASTA.Api/
-│   ├── Controllers/          # Controladores REST delegadores (sin lógica de negocio)
-│   ├── Middlewares/          # ExceptionMiddleware centralizado para mapeo de errores consistentes y auditoría
-│   ├── Workers/              # SubastaBackgroundWorker para cierre y activación automática
-│   └── Frontend/             # SPA corporativa en HTML5, CSS3 responsive y Vanilla JS
-│
-└── PROYECTO_SUBASTA.Domain.Tests/ # Suite de pruebas automatizadas (xUnit)
+└── PROYECTO_SUBASTA.Api/
+    ├── Controllers/          # Controladores REST delegadores (sin lógica de negocio)
+    ├── Middlewares/          # ExceptionMiddleware centralizado para mapeo de errores consistentes y auditoría
+    ├── Workers/              # SubastaBackgroundWorker para cierre y activación automática
+    └── Frontend/             # SPA corporativa en HTML5, CSS3 responsive y Vanilla JS
 ```
