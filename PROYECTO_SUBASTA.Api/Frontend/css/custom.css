@@ -199,6 +199,11 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    max-width: calc(50% - 14px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 2;
 }
 
 .badge-categoria {
@@ -212,6 +217,11 @@ body {
     backdrop-filter: blur(4px);
     padding: 0.3em 0.7em;
     border-radius: 6px;
+    max-width: calc(50% - 14px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 2;
 }
 
 .content-card {
@@ -226,18 +236,46 @@ body {
     background: linear-gradient(135deg, #581845 0%, #3e1030 100%);
     color: white;
     border-radius: 14px;
+    height: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
 .wallet-card-available {
     background: linear-gradient(135deg, #059669 0%, #047857 100%);
     color: white;
     border-radius: 14px;
+    height: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
 .wallet-card-retained {
     background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
     color: white;
     border-radius: 14px;
+    height: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.wallet-card-total h2,
+.wallet-card-available h2,
+.wallet-card-retained h2,
+#wallet-saldo-total,
+#wallet-saldo-retenido,
+#wallet-saldo-disponible {
+    white-space: nowrap;
+    font-size: clamp(1.2rem, 2.2vw, 2rem) !important;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* --- Live Auction Room Styling & Regla Anti-Sniping --- */
@@ -989,33 +1027,6 @@ body {
     margin-top: 2px;
 }
 
-/* Tarjetas de Actividades y Catálogo */
-.activity-card {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.activity-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08) !important;
-}
-
-[data-bs-theme="dark"] .activity-card {
-    background-color: #151d2f !important;
-    border-color: #243049 !important;
-}
-
-[data-bs-theme="dark"] .activity-card .bg-light {
-    background-color: #192231 !important;
-    border-color: #273449 !important;
-}
-
-[data-bs-theme="dark"] .activity-card .text-dark {
-    color: #f1f5f9 !important;
-}
-
-[data-bs-theme="dark"] .activity-card .border {
-    border-color: #273449 !important;
-}
 
 /* Pills de categorías */
 .category-pill {
@@ -1173,11 +1184,188 @@ body {
 
 .card-stat-metric {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .card-stat-metric:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   FASE 6.5: RESPONSIVE DESIGN (375px, 768px, 1440px)
+   ========================================================================== */
+
+/* Prevenir overflow horizontal global en todos los viewports */
+html, body {
+    max-width: 100%;
+    overflow-x: clip;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* (c) Billetera: asegurar columnas y tarjetas de altura igual */
+#content-billetera .row.g-4 > [class*="col-"] {
+    display: flex;
+}
+
+/* (a) Mis Actividades: min-width:0, flex-wrap y overflow-wrap:anywhere */
+#content-actividades,
+#content-actividades .card,
+#content-actividades .content-card,
+#actividades-mis-pujas,
+#actividades-mis-publicaciones,
+.activity-card,
+.card-stat-metric {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.activity-card {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.activity-card .d-flex {
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.activity-card .flex-grow-1 {
+    min-width: 0;
+}
+
+/* (b) Formulario de publicación: prevención de recorte de inputs en 768px y móvil */
+#form-crear-subasta input[type="datetime-local"],
+#form-crear-subasta input[type="number"],
+#form-crear-subasta .input-group {
+    min-width: 0;
+    width: 100%;
+}
+
+#form-crear-subasta input[type="datetime-local"] {
+    font-size: clamp(0.82rem, 1.8vw, 0.95rem);
+    padding: 0.45rem 0.6rem;
+}
+
+/* Media Query Tablet y Móvil (<= 991.98px / 768px) */
+@media (max-width: 991.98px) {
+    /* Formulario de publicación: columnas completas para evitar recorte de fechas y precios */
+    #form-crear-subasta > .row > .col-md-8,
+    #form-crear-subasta > .row > .col-md-4 {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+
+    #form-crear-subasta .row.g-3 > .col-md-6,
+    #form-crear-subasta .row.g-4 > .col-md-6 {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Badges del catálogo más compactos para evitar solapamiento */
+    .auction-card .card-img-wrapper .badge-categoria,
+    .auction-card .card-img-wrapper .badge-status {
+        font-size: 0.68rem;
+        padding: 0.25rem 0.5rem;
+        top: 8px;
+    }
+    .auction-card .card-img-wrapper .badge-categoria {
+        left: 8px;
+        max-width: calc(50% - 12px);
+    }
+    .auction-card .card-img-wrapper .badge-status {
+        right: 8px;
+        max-width: calc(50% - 12px);
+    }
+}
+
+/* Media Query Móvil Estricto (<= 576px / 375px) */
+@media (max-width: 576px) {
+    .container-fluid {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .content-card {
+        padding: 1rem !important;
+    }
+
+    .sidebar-card {
+        padding: 0.75rem !important;
+    }
+
+    /* Mis Actividades: layout vertical para evitar scroll horizontal a 375px */
+    .activity-card {
+        padding: 0.85rem !important;
+    }
+
+    .activity-card > .d-flex {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem !important;
+    }
+
+    .activity-card > .d-flex > img {
+        width: 100% !important;
+        height: 130px !important;
+        object-fit: cover;
+    }
+
+    .activity-card .d-flex.justify-content-between {
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .card-stat-metric {
+        padding: 1rem !important;
+    }
+
+    .stat-metric-num {
+        font-size: 2.2rem !important;
+    }
+
+    /* Sala en vivo */
+    #content-sala div[style*="min-width: 280px"] {
+        min-width: 100% !important;
+        width: 100% !important;
+    }
+
+    .live-room-banner {
+        padding: 1rem !important;
+    }
+
+    .live-room-banner .d-flex {
+        flex-wrap: wrap;
+    }
+
+    #quick-bids-container {
+        flex-wrap: wrap;
+    }
+
+    /* Dropdowns */
+    .dropdown-menu {
+        max-width: calc(100vw - 20px);
+        min-width: 280px !important;
+    }
+
+    .navbar-brand {
+        font-size: 1.25rem !important;
+    }
+}
+
+/* Desktop Grande (1440px) */
+@media (min-width: 1440px) {
+    .container-fluid {
+        max-width: 1440px;
+        margin: 0 auto;
+    }
 }
 
 

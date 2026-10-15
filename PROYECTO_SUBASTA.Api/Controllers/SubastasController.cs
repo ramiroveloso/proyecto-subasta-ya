@@ -5,49 +5,47 @@ using Microsoft.AspNetCore.Mvc;
 using PROYECTO_SUBASTA.Application.Commands.Subastas;
 using PROYECTO_SUBASTA.Application.DTOs;
 using PROYECTO_SUBASTA.Application.Queries.Subastas;
-using PROYECTO_SUBASTA.Application.UseCases;
 
 namespace PROYECTO_SUBASTA.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     [Produces("application/json")]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
     public class SubastasController : ControllerBase
     {
-        private readonly ObtenerSubastasActivasQueryHandler _obtenerSubastasActivasHandler;
+        private readonly ObtenerSubastasQueryHandler _obtenerSubastasHandler;
         private readonly ObtenerSubastaPorIdQueryHandler _obtenerSubastaPorIdHandler;
         private readonly CrearSubastaCommandHandler _crearSubastaHandler;
         private readonly RegistrarPujaCommandHandler _registrarPujaHandler;
-        private readonly IAdjudicacionService _adjudicacionService;
+        private readonly CerrarSubastasVencidasCommandHandler _cerrarSubastasHandler;
 
         public SubastasController(
-            ObtenerSubastasActivasQueryHandler obtenerSubastasActivasHandler,
+            ObtenerSubastasQueryHandler obtenerSubastasHandler,
             ObtenerSubastaPorIdQueryHandler obtenerSubastaPorIdHandler,
             CrearSubastaCommandHandler crearSubastaHandler,
             RegistrarPujaCommandHandler registrarPujaHandler,
-            IAdjudicacionService adjudicacionService)
+            CerrarSubastasVencidasCommandHandler cerrarSubastasHandler)
         {
-            _obtenerSubastasActivasHandler = obtenerSubastasActivasHandler;
+            _obtenerSubastasHandler = obtenerSubastasHandler;
             _obtenerSubastaPorIdHandler = obtenerSubastaPorIdHandler;
             _crearSubastaHandler = crearSubastaHandler;
             _registrarPujaHandler = registrarPujaHandler;
-            _adjudicacionService = adjudicacionService;
+            _cerrarSubastasHandler = cerrarSubastasHandler;
         }
 
         /// <summary>
-        /// Recupera el catálogo de subastas activas de forma paginada para optimizar recursos.
+        /// Recupera el catálogo de subastas con filtros opcionales (categoría, estado, precio mínimo/máximo, orden y paginación).
         /// </summary>
         [HttpGet]
         [ProducesResponseType(typeof(IEnumerable<SubastaResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ObtenerActivas([FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 50)
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> ObtenerSubastas([FromQuery] ObtenerSubastasQuery query)
         {
-            var dtos = await _obtenerSubastasActivasHandler.HandleAsync(new ObtenerSubastasActivasQuery
-            {
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            });
-
-            return Ok(dtos);
+            var (items, total) = await _obtenerSubastasHandler.HandleAsync(query ?? new ObtenerSubastasQuery());
+            Response.Headers["X-Total-Count"] = total.ToString();
+            Response.Headers["Access-Control-Expose-Headers"] = "X-Total-Count";
+            return Ok(items);
         }
 
         /// <summary>
@@ -55,13 +53,19 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         /// </summary>
         [HttpGet("{id}")]
         [ProducesResponseType(typeof(SubastaResponseDto), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ObtenerPorId(int id)
         {
+            if (id <= 0)
+            {
+                return BadRequest(new ErrorResponse { StatusCode = 400, Mensaje = "El identificador de subasta debe ser mayor a cero.", Timestamp = System.DateTime.UtcNow });
+            }
+
             var subastaDto = await _obtenerSubastaPorIdHandler.HandleAsync(new ObtenerSubastaPorIdQuery { Id = id });
             if (subastaDto == null)
             {
-                return NotFound(new { mensaje = $"No se encontró la subasta con el ID {id}." });
+                return NotFound(new ErrorResponse { StatusCode = 404, Mensaje = $"No se encontró la subasta con el ID {id}.", Timestamp = System.DateTime.UtcNow });
             }
 
             return Ok(subastaDto);
@@ -72,18 +76,26 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         /// </summary>
         [HttpPost]
         [ProducesResponseType(typeof(SubastaResponseDto), StatusCodes.Status201Created)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Crear([FromBody] CrearSubastaDto dto)
         {
-            if (dto == null)
+            var command = new CrearSubastaCommand
             {
-                return BadRequest("Los datos de la subasta son inválidos.");
-            }
+                Titulo = dto.Titulo,
+                Descripcion = dto.Descripcion,
+                UrlImagen = dto.UrlImagen,
+                PrecioBase = dto.PrecioBase,
+                IncrementoMinimo = dto.IncrementoMinimo,
+                FechaInicio = dto.FechaInicio,
+                FechaFin = dto.FechaFin,
+                CategoriaId = dto.CategoriaId,
+                VendedorId = dto.VendedorId
+            };
 
-            var subasta = await _crearSubastaHandler.HandleAsync(dto);
-            var responseDto = ObtenerSubastasActivasQueryHandler.MapearADto(subasta);
+            var responseDto = await _crearSubastaHandler.HandleAsync(command);
 
-            return CreatedAtAction(nameof(ObtenerPorId), new { id = subasta.Id }, responseDto);
+            return CreatedAtAction(nameof(ObtenerPorId), new { id = responseDto.Id }, responseDto);
         }
 
         /// <summary>
@@ -92,14 +104,14 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         /// </summary>
         [HttpPost("{id}/pujas")]
         [ProducesResponseType(typeof(RegistrarPujaResponseDto), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
         public async Task<IActionResult> RegistrarPuja(int id, [FromBody] RegistrarPujaDto dto)
         {
             if (dto == null)
             {
-                return BadRequest("Los datos de la puja son inválidos.");
+                return BadRequest(new ErrorResponse { StatusCode = 400, Mensaje = "Los datos de la puja son inválidos.", Timestamp = System.DateTime.UtcNow });
             }
 
             var respuesta = await _registrarPujaHandler.HandleAsync(new RegistrarPujaCommand
@@ -117,17 +129,12 @@ namespace PROYECTO_SUBASTA.Api.Controllers
         /// Ejecuta el proceso de sincronización, adjudicación y cierre para subastas vencidas.
         /// </summary>
         [HttpPost("cierres")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(CierreSubastasResultDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> ProcesarCierres()
         {
-            var res = await _adjudicacionService.ProcesarSubastasVencidasAsync();
-            return Ok(new
-            {
-                mensaje = "Proceso de verificación y adjudicación ejecutado exitosamente.",
-                subastasActivadas = res.Activadas,
-                subastasFinalizadas = res.Finalizadas,
-                subastasDesiertas = res.Desiertas
-            });
+            var res = await _cerrarSubastasHandler.HandleAsync(new CerrarSubastasVencidasCommand());
+            return Ok(res);
         }
     }
 }

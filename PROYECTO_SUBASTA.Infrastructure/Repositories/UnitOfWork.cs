@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using PROYECTO_SUBASTA.Application.Exceptions;
 using PROYECTO_SUBASTA.Application.Repositories;
 using PROYECTO_SUBASTA.Infrastructure.Data;
 
@@ -20,22 +21,33 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
-            return await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                return await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                throw new ConcurrenciaException("Conflicto de concurrencia: los datos fueron modificados por otra operación.", ex);
+            }
         }
 
-        public async Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+        public async Task BeginTransactionAsync(CancellationToken cancellationToken = default)
         {
             if (_currentTransaction != null)
             {
-                return _currentTransaction;
+                return;
             }
 
             var strategy = _context.Database.CreateExecutionStrategy();
-            _currentTransaction = await strategy.ExecuteAsync(async () =>
+            await strategy.ExecuteAsync(async () =>
             {
-                return await _context.Database.BeginTransactionAsync(cancellationToken);
+                _currentTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
             });
-            return _currentTransaction;
+        }
+
+        public void DescartarCambios()
+        {
+            _context.ChangeTracker.Clear();
         }
 
         public async Task CommitTransactionAsync(CancellationToken cancellationToken = default)
@@ -48,6 +60,11 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
                 {
                     await _currentTransaction.CommitAsync(cancellationToken);
                 }
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                await RollbackTransactionAsync(cancellationToken);
+                throw new ConcurrenciaException("Conflicto de concurrencia al confirmar la transacción: los datos fueron modificados por otra operación.", ex);
             }
             catch
             {

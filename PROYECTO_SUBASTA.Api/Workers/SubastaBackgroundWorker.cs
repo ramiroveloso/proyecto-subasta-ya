@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using PROYECTO_SUBASTA.Application.UseCases;
+using PROYECTO_SUBASTA.Application.Commands.Subastas;
 
 namespace PROYECTO_SUBASTA.Api.Workers
 {
@@ -30,8 +30,8 @@ namespace PROYECTO_SUBASTA.Api.Workers
                 try
                 {
                     using var scope = _scopeFactory.CreateScope();
-                    var adjudicacionService = scope.ServiceProvider.GetRequiredService<IAdjudicacionService>();
-                    var res = await adjudicacionService.ProcesarSubastasVencidasAsync(stoppingToken);
+                    var handler = scope.ServiceProvider.GetRequiredService<CerrarSubastasVencidasCommandHandler>();
+                    var res = await handler.HandleAsync(new CerrarSubastasVencidasCommand(), stoppingToken);
 
                     if (res.Finalizadas > 0 || res.Desiertas > 0 || res.Activadas > 0)
                     {

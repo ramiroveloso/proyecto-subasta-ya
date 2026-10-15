@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using PROYECTO_SUBASTA.Domain.Constants;
 using PROYECTO_SUBASTA.Domain.Exceptions;
 
 namespace PROYECTO_SUBASTA.Domain.Entities
@@ -11,15 +12,61 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         public string Titulo { get; set; } = string.Empty;
         public string Descripcion { get; set; } = string.Empty;
         public string UrlImagen { get; set; } = string.Empty;
-        public decimal PrecioBase { get; set; }
-        public decimal IncrementoMinimo { get; set; }
+        private decimal _precioBase;
+        private decimal _incrementoMinimo;
+        private decimal? _precioFinal;
+
+        public decimal PrecioBase
+        {
+            get => _precioBase;
+            set
+            {
+                ValidarMonto(value, "El precio base");
+                _precioBase = value;
+            }
+        }
+
+        public decimal IncrementoMinimo
+        {
+            get => _incrementoMinimo;
+            set
+            {
+                ValidarMonto(value, "El incremento mínimo");
+                _incrementoMinimo = value;
+            }
+        }
+
         public DateTime FechaInicio { get; set; }
         public DateTime FechaFin { get; set; }
-        public string Estado { get; set; } = "PROGRAMADA"; // PROGRAMADA, ACTIVA, FINALIZADA, DESIERTA
+        public string Estado { get; set; } = EstadoSubasta.PROGRAMADA; // PROGRAMADA, ACTIVA, FINALIZADA, DESIERTA
         public int CategoriaId { get; set; }
         public int VendedorId { get; set; }
         public int? GanadorId { get; set; }
-        public decimal? PrecioFinal { get; set; }
+
+        public decimal? PrecioFinal
+        {
+            get => _precioFinal;
+            set
+            {
+                if (value.HasValue)
+                {
+                    ValidarMonto(value.Value, "El precio final");
+                }
+                _precioFinal = value;
+            }
+        }
+
+        public static void ValidarMonto(decimal monto, string nombreCampo = "El monto", decimal limiteMaximo = 100_000_000m)
+        {
+            if (monto <= 0)
+                throw new DominioException($"{nombreCampo} debe ser mayor a cero.");
+
+            if (decimal.Round(monto, 2) != monto)
+                throw new DominioException($"{nombreCampo} no puede tener más de dos decimales.");
+
+            if (monto > limiteMaximo)
+                throw new DominioException($"{nombreCampo} no puede superar el límite permitido de ${limiteMaximo:N2}.");
+        }
 
         // Control de Concurrencia Optimista (Optimistic Locking)
         public uint Version { get; set; }
@@ -27,6 +74,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         // Relaciones de navegación
         public Categoria? Categoria { get; set; }
         public Usuario? Vendedor { get; set; }
+        public Usuario? Ganador { get; set; }
         public ICollection<Puja> Pujas { get; set; } = new List<Puja>();
 
         // ========================================================================
@@ -60,7 +108,8 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         /// </summary>
         public void ValidarPuedePujar(int usuarioId, decimal monto, DateTime ahoraUtc, decimal? saldoDisponiblePostor = null)
         {
-            if (Estado != "ACTIVA")
+            Puja.ValidarMonto(monto);
+            if (Estado != EstadoSubasta.ACTIVA)
                 throw new DominioException($"No se pueden realizar pujas en una subasta que no está activa (Estado actual: '{Estado}').");
 
             if (ahoraUtc >= FechaFin)
@@ -146,14 +195,26 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         }
 
         /// <summary>
+        /// Activa la subasta programada al cumplirse la fecha de inicio.
+        /// </summary>
+        public void Activar()
+        {
+            if (Estado != EstadoSubasta.PROGRAMADA)
+                throw new DominioException($"No se puede activar una subasta en estado '{Estado}'. Solo subastas PROGRAMADAS pueden activarse.");
+
+            Estado = EstadoSubasta.ACTIVA;
+            Version++;
+        }
+
+        /// <summary>
         /// Concluye la subasta con adjudicación y ganador.
         /// </summary>
         public void Finalizar(int ganadorId, decimal precioFinal)
         {
-            if (Estado != "ACTIVA" && Estado != "PROGRAMADA")
+            if (Estado != EstadoSubasta.ACTIVA && Estado != EstadoSubasta.PROGRAMADA)
                 throw new DominioException($"No se puede finalizar una subasta en estado '{Estado}'.");
 
-            Estado = "FINALIZADA";
+            Estado = EstadoSubasta.FINALIZADA;
             GanadorId = ganadorId;
             PrecioFinal = precioFinal;
             Version++;
@@ -164,10 +225,10 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         /// </summary>
         public void DeclararDesierta()
         {
-            if (Estado != "ACTIVA" && Estado != "PROGRAMADA")
+            if (Estado != EstadoSubasta.ACTIVA && Estado != EstadoSubasta.PROGRAMADA)
                 throw new DominioException($"No se puede declarar desierta una subasta en estado '{Estado}'.");
 
-            Estado = "DESIERTA";
+            Estado = EstadoSubasta.DESIERTA;
             GanadorId = null;
             PrecioFinal = null;
             Version++;
