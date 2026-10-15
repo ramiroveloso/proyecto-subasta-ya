@@ -80,14 +80,14 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
 
             if (precioMin.HasValue)
             {
-                var pMin = (double)precioMin.Value;
-                query = query.Where(s => (s.Pujas.Select(p => (double?)p.Monto).Max() ?? (double)s.PrecioBase) >= pMin);
+                var pMin = precioMin.Value;
+                query = query.Where(s => (s.Pujas.Select(p => (decimal?)p.Monto).Max() ?? s.PrecioBase) >= pMin);
             }
 
             if (precioMax.HasValue)
             {
-                var pMax = (double)precioMax.Value;
-                query = query.Where(s => (s.Pujas.Select(p => (double?)p.Monto).Max() ?? (double)s.PrecioBase) <= pMax);
+                var pMax = precioMax.Value;
+                query = query.Where(s => (s.Pujas.Select(p => (decimal?)p.Monto).Max() ?? s.PrecioBase) <= pMax);
             }
 
             var ordenNorm = orden?.Trim().ToLowerInvariant();
@@ -95,8 +95,8 @@ namespace PROYECTO_SUBASTA.Infrastructure.Repositories
             {
                 "cierre" or "tiempo" => query.OrderBy(s => s.FechaFin),
                 "cierre_desc" => query.OrderByDescending(s => s.FechaFin),
-                "precio" => query.OrderBy(s => s.Pujas.Select(p => (double?)p.Monto).Max() ?? (double)s.PrecioBase),
-                "precio_desc" => query.OrderByDescending(s => s.Pujas.Select(p => (double?)p.Monto).Max() ?? (double)s.PrecioBase),
+                "precio" => query.OrderBy(s => s.Pujas.Select(p => (decimal?)p.Monto).Max() ?? s.PrecioBase),
+                "precio_desc" => query.OrderByDescending(s => s.Pujas.Select(p => (decimal?)p.Monto).Max() ?? s.PrecioBase),
                 "pujas" or "puja" => query.OrderByDescending(s => s.Pujas.Count),
                 _ => query.OrderByDescending(s => s.Id)
             };

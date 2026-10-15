@@ -4,6 +4,7 @@
 
 let usuarioActual = null;
 let usuariosDisponibles = [];
+let ultimoSaldoDisponibleUsuario = null;
 
 let subastasCache = [];
 let categoriasCache = [];
@@ -123,6 +124,7 @@ function cerrarSesion() {
     detenerPollingCatalogo();
     borrarSesion();
     usuarioActual = null;
+    ultimoSaldoDisponibleUsuario = null;
     actualizarVisibilidadAuditoria();
 
     // Limpiar UI del usuario en navbar superior y dropdown
@@ -659,6 +661,7 @@ async function sincronizarSaldosDropdown() {
         const bActual = await fetchObtenerBilletera(usuarioActual.id).catch(() => null);
         if (bActual) {
             const saldoActualDisp = bActual.saldoDisponible ?? bActual.SaldoDisponible ?? 0;
+            ultimoSaldoDisponibleUsuario = saldoActualDisp;
             const navBadge = document.getElementById('nav-user-saldo');
             if (navBadge) {
                 navBadge.textContent = `$${saldoActualDisp.toLocaleString('es-AR')}`;
@@ -1535,6 +1538,8 @@ async function ejecutarPollingSala() {
             const cantPujasNueva = (subastaFresca.pujas || subastaFresca.Pujas || []).length;
             const fechaFinPrevia = subastaSeleccionadaSala.fechaFin ?? subastaSeleccionadaSala.FechaFin;
             const fechaFinNueva = subastaFresca.fechaFin ?? subastaFresca.FechaFin;
+            const estadoPrevio = subastaSeleccionadaSala.estado ?? subastaSeleccionadaSala.Estado;
+            const estadoNuevo = subastaFresca.estado ?? subastaFresca.Estado;
 
             const eraLider = calcularSiUsuarioEsLider(subastaSeleccionadaSala, usuarioActual.id);
             const esLiderAhora = calcularSiUsuarioEsLider(subastaFresca, usuarioActual.id);
@@ -1547,7 +1552,8 @@ async function ejecutarPollingSala() {
 
             const huboCambio = (versionNueva !== versionPrevia) || 
                               (cantPujasNueva !== cantPujasPrevia) ||
-                              (fechaFinNueva !== fechaFinPrevia);
+                              (fechaFinNueva !== fechaFinPrevia) ||
+                              (estadoNuevo !== estadoPrevio);
 
             if (huboCambio) {
                 subastaSeleccionadaSala = subastaFresca;
@@ -1581,8 +1587,14 @@ async function ejecutarPollingSala() {
             }
 
             if (billeteraFresca) {
+                const nuevoSaldo = billeteraFresca.saldoDisponible ?? billeteraFresca.SaldoDisponible ?? 0;
+                const saldoCambio = (ultimoSaldoDisponibleUsuario !== null && nuevoSaldo !== ultimoSaldoDisponibleUsuario);
+                ultimoSaldoDisponibleUsuario = nuevoSaldo;
                 await actualizarBilleteraUI();
                 await sincronizarSaldosDropdown();
+                if (saldoCambio) {
+                    await validarPujaEnVivo();
+                }
             }
         }
     } catch (err) {
@@ -1755,12 +1767,23 @@ function actualizarMonitorPujasSala() {
     document.getElementById('sala-puja-actual').textContent = `$${pujaActual.toLocaleString('es-AR')}`;
 
     const bannerLiderazgo = document.getElementById('sala-banner-liderazgo');
+    const salaLiderActual = document.getElementById('sala-lider-actual');
     const pujas = subastaSeleccionadaSala.pujas || subastaSeleccionadaSala.Pujas || [];
 
     if (pujas.length > 0) {
         const pujasSorted = [...pujas].sort((a, b) => (b.monto ?? b.Monto) - (a.monto ?? a.Monto));
         const mayorPuja = pujasSorted[0];
-        const esMiPuja = (mayorPuja.usuarioId ?? mayorPuja.UsuarioId) === usuarioActual.id;
+        const esMiPuja = usuarioActual ? (mayorPuja.usuarioId ?? mayorPuja.UsuarioId) === usuarioActual.id : false;
+
+        if (salaLiderActual) {
+            if (esMiPuja) {
+                salaLiderActual.innerHTML = '<span class="badge bg-success"><i class="fa-solid fa-crown me-1"></i>Liderando (Tú)</span>';
+            } else {
+                const pUid = Number(mayorPuja.usuarioId ?? mayorPuja.UsuarioId);
+                const rawAnonHandle = mayorPuja.postorAnonimo || `Postor #${(pUid * 33 + 100).toString(16).toUpperCase()}`;
+                salaLiderActual.innerHTML = `<span class="badge bg-warning text-dark"><i class="fa-solid fa-gavel me-1"></i>Líder: ${escaparHtml(rawAnonHandle)}</span>`;
+            }
+        }
 
         if (esMiPuja) {
             bannerLiderazgo.className = 'status-banner-leading p-3 mb-3 d-flex align-items-center';
@@ -1772,7 +1795,7 @@ function actualizarMonitorPujasSala() {
                 </div>
             `;
         } else {
-            const usuarioParticipo = pujas.some(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id);
+            const usuarioParticipo = usuarioActual ? pujas.some(p => (p.usuarioId ?? p.UsuarioId) === usuarioActual.id) : false;
             if (usuarioParticipo) {
                 bannerLiderazgo.className = 'status-banner-outbid p-3 mb-3 d-flex align-items-center';
                 bannerLiderazgo.innerHTML = `
@@ -1794,6 +1817,9 @@ function actualizarMonitorPujasSala() {
             }
         }
     } else {
+        if (salaLiderActual) {
+            salaLiderActual.innerHTML = '<span class="badge bg-secondary">Sin ofertas</span>';
+        }
         const precioBase = subastaSeleccionadaSala.precioBase ?? subastaSeleccionadaSala.PrecioBase ?? 0;
         bannerLiderazgo.className = 'alert alert-light border p-3 mb-3 d-flex align-items-center';
         bannerLiderazgo.innerHTML = `
@@ -1930,13 +1956,27 @@ async function validarPujaEnVivo() {
         return false;
     }
 
+    if (montoIngresado > 100000000) {
+        btnPuja.disabled = true;
+        if (textPuja) textPuja.innerHTML = '<i class="fa-solid fa-circle-exclamation me-2"></i> Límite Excedido';
+        feedbackBox.className = 'validation-feedback-box alert alert-danger py-2 small mb-0';
+        feedbackBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i> El monto de la oferta no puede superar el límite máximo permitido de <strong>$100.000.000</strong> (MonedaPrecision).`;
+        feedbackBox.classList.remove('d-none');
+        return false;
+    }
+
     // 5. Validar saldo disponible en billetera (si ya es líder, solo requiere cubrir el incremento)
     let saldoDisponible = 0;
-    try {
-        const b = await fetchObtenerBilletera(usuarioActual.id);
-        saldoDisponible = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
-    } catch (_) {
-        saldoDisponible = 0;
+    if (ultimoSaldoDisponibleUsuario !== null && ultimoSaldoDisponibleUsuario !== undefined) {
+        saldoDisponible = ultimoSaldoDisponibleUsuario;
+    } else if (usuarioActual && usuarioActual.id) {
+        try {
+            const b = await fetchObtenerBilletera(usuarioActual.id);
+            saldoDisponible = b ? (b.saldoDisponible ?? b.SaldoDisponible ?? 0) : 0;
+            ultimoSaldoDisponibleUsuario = saldoDisponible;
+        } catch (_) {
+            saldoDisponible = 0;
+        }
     }
 
     const garantiaRequerida = esMiPujaLider ? Math.max(0, montoIngresado - montoLiderPrevio) : montoIngresado;
@@ -2094,6 +2134,7 @@ async function actualizarBilleteraUI() {
         const movimientos = await fetchObtenerMovimientos(usuarioActual.id);
 
         const saldoDisp = billetera.saldoDisponible ?? billetera.SaldoDisponible ?? 0;
+        ultimoSaldoDisponibleUsuario = saldoDisp;
         const saldoRet = billetera.saldoRetenido ?? billetera.SaldoRetenido ?? 0;
         const saldoTot = billetera.saldoTotal ?? billetera.SaldoTotal ?? 0;
 
@@ -2575,6 +2616,12 @@ function configurarEventosUI() {
 
     const formPuja = document.getElementById('form-realizar-puja');
     if (formPuja) formPuja.addEventListener('submit', enviarPuja);
+
+    const inputPuja = document.getElementById('input-monto-puja');
+    if (inputPuja) {
+        inputPuja.addEventListener('input', () => validarPujaEnVivo());
+        inputPuja.addEventListener('change', () => validarPujaEnVivo());
+    }
 
     const formCargar = document.getElementById('form-cargar-saldo');
     if (formCargar) formCargar.addEventListener('submit', procesarCargaSaldoModal);
