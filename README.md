@@ -65,6 +65,13 @@ La API sirve los archivos estáticos del frontend directamente desde `PROYECTO_S
 * Accede desde el navegador a la raíz `http://localhost:<puerto>/` o `http://localhost:<puerto>/index.html`.
 * La interfaz interactúa en tiempo real con los endpoints REST del backend (sin mocks ni datos simulados), reflejando la concurrencia optimista, extensiones anti-sniping y saldos retenidos en Escrow.
 
+### 4. Despliegue con Docker (Render / Nube)
+El proyecto incluye soporte Docker para despliegue en la nube (Render):
+```bash
+docker build -t subastaya .
+docker run -p 8080:8080 subastaya
+```
+
 ---
 
 ## 👥 Usuarios Demo y Credenciales
@@ -100,6 +107,7 @@ dotnet run --project PROYECTO_SUBASTA.Api
 ```
 proyecto-subasta-ya/
 │
+├── Dockerfile
 ├── PROYECTO_SUBASTA.Domain/
 │   ├── Entities/             # Entidades de dominio ricas (Subasta, Billetera, Puja, TransactionLedger, Usuario, Categoria, LogAuditoria)
 │   └── Exceptions/           # Excepciones de negocio y dominio (DominioException)
