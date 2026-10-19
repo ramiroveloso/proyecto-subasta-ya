@@ -1,0 +1,53 @@
+diff --git a/docs/REVISION_RUBRICA.md b/docs/REVISION_RUBRICA.md
+new file mode 100644
+index 0000000..74b12e3
+--- /dev/null
++++ b/docs/REVISION_RUBRICA.md
+@@ -0,0 +1,41 @@
++# Revisión Rúbrica Fase 1
++
++| ID | Criterio | Estado | Evidencia |
++|---|---|---|---|
++| A04 | Modelo EF y esquema coherentes | FALTA | `PROYECTO_SUBASTA.Infrastructure/Data/SubastaDbContext.cs` no tiene configuradas todas las FKs ni CHECK constraints. |
++| A06 | Datos semilla coherentes | FALTA | Se usa `DateTime.UtcNow` en `HasData` (SubastaDbContext.cs:131). Ledger no coincide exactamente con las sumas pedidas. |
++| A07 | Versionado efectivo en todos los escritores | FALTA | `Program.cs` resetea versiones. Faltan verificaciones completas en guardados concurrentes. |
++| A08 | Cierre comparte unidad transaccional | FALTA | Worker de cierre (`AdjudicacionService.cs`) aún guarda parcialmente si hay error. |
++| B01 | Producto, categoría, economía y fechas validados | FALTA | Validaciones hoy dependen parcialmente del controlador o no son estrictas. |
++| B02 | Rechazos de puja sin efectos financieros | FALTA | Falta verificar tests. |
++| B03 | Retención atómica | FALTA | Falta verificar si la liberación se hace en la misma UoW. |
++| B04 | Escenarios de concurrencia | FALTA | No hay tests de integración de concurrencia. |
++| B05 | Extensión Anti-Sniping 120s | FALTA | Subasta.cs:119 tiene parámetros default de 60s/60s. |
++| B06 | Liquidación de cierre | FALTA | Lógica acoplada en `AdjudicacionService`. |
++| B07 | Total, retenido y disponible concilian | FALTA | Billetera no previene saldo ficticio en todos los casos de cierre. |
++| B08 | Auditoría diferenciada | FALTA | Ledger y LogAuditoria se mezclan o faltan logs de rechazo. |
++| B09 | Recursos plurales y GET puro | FALTA | `GET /api/Subastas` invoca cierre de subastas (`ProcesarSubastasVencidasAsync`). |
++| B10 | OpenAPI y Swagger coherentes | FALTA | Faltan anotaciones de tipos de retorno de error. |
++| B11 | Filtros, ordenamiento y paginación en BD | FALTA | `ObtenerSubastasActivasQueryHandler` pagina y filtra en memoria. |
++| B12 | Fallo revierte unidad de negocio | FALTA | No se revierte unit of work si falla auditoría. |
++| C01 | Controladores invocan handlers y retornan DTO | PARCIAL | Algunos endpoints aún devuelven entidades. |
++| C02 | Casos de uso consumen contratos | FALTA | Controladores a veces tocan DbContext o entidades directamente. |
++| C04 | Infraestructura persiste, Aplicación coordina | FALTA | AdjudicacionService en Infraestructura coordina lógica de cierre. |
++| C05 | Nombres cohesionados y sin duplicación | FALTA | |
++| C06 | Operaciones sin fire-and-forget | FALTA | ExceptionMiddleware usa `_ = auditoria.RegistrarFalloAsync`. |
++| C07 | Logs con contexto y errores explícitos | FALTA | |
++| C08 | Precisión decimal coherente | FALTA | Falta configuración (18,2) en propiedades de Subasta. |
++| C09 | README | FALTA | |
++| C10 | Configuración de ejemplo segura | FALTA | Contraseña en appsettings.json. |
++| F03 | Contador, historial y sugerencia usables | FALTA | |
++| F09 | Diseño responsive (375px) | FALTA | |
++| F10 | Diseño responsive (768px) | FALTA | |
++| F12 | Estados claros de error | FALTA | |
++| F13 | Refresco en tiempo real (Polling) | FALTA | |
++
++### Respuestas a preguntas específicas de la Fase 1:
++- **¿`GET /api/Subastas` y `GET /api/Subastas/{id}` escriben en la base?** SÍ. Llaman a `await _adjudicacionService.ProcesarSubastasVencidasAsync(cancellationToken);` que modifica y guarda entidades (Cierre).
++- **¿`ObtenerActivasAsync` filtra por estado y pagina en la base de datos o en memoria?** En memoria. `ObtenerSubastasActivasQueryHandler.cs:37` llama a `_subastaRepository.ObtenerActivasAsync()` que trae todas las activas, y luego se hace `Skip` y `Take` en memoria.
++- **¿`Program.cs` contiene un bloque de "sincronización de subastas demo" que muta datos en cada arranque?** SÍ. `Program.cs` muta fechas, estados, billeteras y subastas en `using (var scope = app.Services.CreateScope())`.
++- **¿Hay `HasData` con `DateTime.UtcNow`?** SÍ. Múltiples ocurrencias en `SubastaDbContext.cs` líneas 132-156.
++- **¿Qué propiedades `*Id` escalares no tienen FK?** `TransactionLedger.SubastaId`, `LogAuditoria.UsuarioId`, `Subasta.GanadorId`, `Puja.UsuarioId`.
++- **¿Qué columnas decimal quedan sin precisión explícita?** `Subasta.PrecioBase`, `Subasta.IncrementoMinimo`, `Subasta.PrecioFinal`.
++- **¿`SubastaHub` está registrado? ¿El frontend hace polling periódico?** No revisado completamente, pero la rúbrica pide WebSockets o polling.
++- **¿Qué afirma el README que no existe en el repositorio?** No validado exhaustivamente aún.
++- **¿Algún controlador depende de DbContext, repositorios o IAdjudicacionService?** SÍ. `SubastasController` depende de `IAdjudicacionService`.
++- **¿Quedan `_ = ...Async(...)` sin await?** SÍ. `ExceptionMiddleware.cs` usa `_ = auditoria.RegistrarFalloAsync(...)`.
++- **¿Existe algún endpoint público que permita liberar saldo o registrar movimientos distintos de DEPOSITO?** A revisar en las siguientes fases.
