@@ -61,6 +61,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             // 1. Mutar entidad de negocio (billetera)
             var billetera = await context.Billeteras.FindAsync(1);
             Assert.NotNull(billetera);
+            var saldoOriginal = billetera.SaldoTotal;
             billetera.CargarSaldo(50000m);
 
             // 2. Registrar evento de auditoría de negocio dentro de la transacción activa
@@ -77,7 +78,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             using var assertContext = new SubastaDbContext(_options);
             var billeteraSinModificar = await assertContext.Billeteras.FindAsync(1);
             Assert.NotNull(billeteraSinModificar);
-            Assert.Equal(0m, billeteraSinModificar.SaldoTotal);
+            Assert.Equal(saldoOriginal, billeteraSinModificar.SaldoTotal);
 
             var logsFantasma = await assertContext.LogsAuditoria
                 .Where(l => l.Accion == "PUJA_REGISTRADA")
@@ -101,6 +102,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             var billetera = await context.Billeteras.FindAsync(1);
             Assert.NotNull(billetera);
+            var saldoOriginal = billetera.SaldoTotal;
             billetera.CargarSaldo(30000m);
 
             // Se intenta registrar evento de auditoría de negocio dentro de la transacción
@@ -134,7 +136,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             var billeteraSinCambios = await assertContext.Billeteras.FindAsync(1);
             Assert.NotNull(billeteraSinCambios);
-            Assert.Equal(0m, billeteraSinCambios.SaldoTotal);
+            Assert.Equal(saldoOriginal, billeteraSinCambios.SaldoTotal);
         }
 
         [Fact]
@@ -153,6 +155,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
 
             var billetera = await context.Billeteras.FindAsync(1);
             Assert.NotNull(billetera);
+            var saldoOriginal = billetera.SaldoTotal;
             billetera.CargarSaldo(75000m);
 
             await auditoriaService.RegistrarAsync(
@@ -167,7 +170,7 @@ namespace PROYECTO_SUBASTA.Domain.Tests
             using var assertContext = new SubastaDbContext(_options);
             var billeteraActualizada = await assertContext.Billeteras.FindAsync(1);
             Assert.NotNull(billeteraActualizada);
-            Assert.Equal(75000m, billeteraActualizada.SaldoTotal);
+            Assert.Equal(saldoOriginal + 75000m, billeteraActualizada.SaldoTotal);
 
             var logGuardado = await assertContext.LogsAuditoria
                 .FirstOrDefaultAsync(l => l.Accion == "PUJA_CONFIRMADA");
