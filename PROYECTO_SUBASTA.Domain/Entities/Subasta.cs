@@ -27,6 +27,7 @@ namespace PROYECTO_SUBASTA.Domain.Entities
         // Relaciones de navegación
         public Categoria? Categoria { get; set; }
         public Usuario? Vendedor { get; set; }
+        public Usuario? Ganador { get; set; }
         public ICollection<Puja> Pujas { get; set; } = new List<Puja>();
 
         // ========================================================================
